@@ -7,11 +7,11 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { DatasByChaineColumns } from "./customColumn"
 import { DateRange } from "@/components/DatePicker"
+import { useProducts } from "@/hooks/useProducts"
 
 export default function Example() {
   const router = useRouter()
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
-
 
   console.log("dateRange", dateRange)
 
@@ -21,23 +21,49 @@ export default function Example() {
     fetchDatasByChaines,
     fetchDatasByChaineSector,
     getPigeReportLink,
+    getPigeReportLinkAdvertiser,
+    fetchDatasByAnnonceurSector,
   } = useWorkspaceContext()
+
+  const { products } = useProducts()
+
+  const product = products?.find((p) => workspace?.products?.includes(p.id))
+
+  console.log("datasByChaines", datasByChaines)
 
   useEffect(() => {
     if (workspace?.id_client) {
       // fetchDatasByChaines(workspace?.id_client)
-      fetchDatasByChaineSector(workspace?.id_client, workspace?.sector_activity)
+      if (product?.code === "METV" || product?.code === "MER") {
+        fetchDatasByChaineSector(
+          workspace?.id_client,
+          workspace?.sector_activity,
+        )
+      } else if (product?.code === "MEP") {
+        fetchDatasByAnnonceurSector(
+          workspace?.id_client,
+          workspace?.sector_activity,
+        )
+      }
     }
-  }, [workspace])
+  }, [workspace, product])
 
   console.log("datasByChaines", datasByChaines)
 
   function handleExport() {
-    const link = getPigeReportLink(
-      workspace?.sector_activity,
-      workspace?.id_client,
-    )
-    window.open(link, "_blank")
+    if (product?.code === "METV" || product?.code === "MER") {
+      const link = getPigeReportLink(
+        workspace?.sector_activity,
+        workspace?.id_client,
+      )
+      window.open(link, "_blank")
+    } else if (product?.code === "MEP") {
+      const link = getPigeReportLinkAdvertiser(
+        workspace?.sector_activity,
+        workspace?.id_client,
+      )
+      window.open(link, "_blank")
+    }
   }
 
   if (!workspace) {

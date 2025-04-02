@@ -14,6 +14,7 @@ export const siteConfig = {
         billing: "/dashboard/settings/billing",
         users: "/dashboard/settings/users",
       },
+      simulation: "/dashboard/simulation",
     },
   },
 }

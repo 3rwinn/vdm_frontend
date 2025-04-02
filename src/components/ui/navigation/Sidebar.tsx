@@ -6,27 +6,55 @@ import {
   RiLinkM,
   RiListCheck,
   RiSettings5Line,
+  RiBarChartBoxLine,
 } from "@remixicon/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import MobileSidebar from "./MobileSidebar"
-import {
-  WorkspacesDropdownDesktop,
-} from "./SidebarWorkspacesDropdown"
+import { WorkspacesDropdownDesktop } from "./SidebarWorkspacesDropdown"
 import { UserProfileDesktop, UserProfileMobile } from "./UserProfile"
 import { useSession } from "next-auth/react"
 import { redirect } from "next/navigation"
 import { useWorkspaceContext } from "@/context/WsContext"
 import { WorkspaceVdmMobile } from "./WorkspaceVdm"
 import { WorkspaceVdmDesktop } from "./WorkspaceVdm"
+import { useProducts } from "@/hooks/useProducts"
 
-const navigation = [
+const navigationAll = [
   {
     name: "Vue d'ensemble",
     href: siteConfig.baseLinks.dashboard.overview,
     icon: RiHome2Line,
   },
-  { name: "Rapports", href: siteConfig.baseLinks.dashboard.details, icon: RiListCheck },
+  {
+    name: "Rapports",
+    href: siteConfig.baseLinks.dashboard.details,
+    icon: RiListCheck,
+  },
+
+  {
+    name: "Paramètres",
+    href: siteConfig.baseLinks.dashboard.settings.general,
+    icon: RiSettings5Line,
+  },
+] as const
+
+const navigationMep = [
+  {
+    name: "Vue d'ensemble",
+    href: siteConfig.baseLinks.dashboard.overview,
+    icon: RiHome2Line,
+  },
+  {
+    name: "Rapports",
+    href: siteConfig.baseLinks.dashboard.details,
+    icon: RiListCheck,
+  },
+  {
+    name: "Simulation",
+    href: "/dashboard/simulation",
+    icon: RiBarChartBoxLine,
+  },
   {
     name: "Paramètres",
     href: siteConfig.baseLinks.dashboard.settings.general,
@@ -70,10 +98,19 @@ export function Sidebar() {
 
   const { workspace, isLoading: isWorkspaceLoading } = useWorkspaceContext()
 
+  const { products } = useProducts()
+
+  const product = products?.find((p) => workspace?.products?.includes(p.id))
+
+  console.log("workspce_sidebar", workspace)
+  console.log("worksapce_product", product)
+
+  const navigation =
+    product?.code === "MEP" ? navigationMep : navigationAll
+
   if (status === "unauthenticated") {
     return redirect("/login")
   }
-
 
   if (status === "loading") {
     return (

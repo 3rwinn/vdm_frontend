@@ -50,6 +50,45 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [topAnnonceur, setTopAnnonceur] = useState<any | null>(null)
   const [ddaChannel, setDdaChannel] = useState<any | null>(null)
   const [datasByChaines, setDatasByChaines] = useState<any | null>(null)
+  const [mepAnalysis, setMepAnalysis] = useState<any | null>(null)
+
+  const updateWorkspace = async (workspace_id: any, workspace: Workspace) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/${workspace_id}/`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "PATCH",
+          body: JSON.stringify(workspace),
+        },
+      )
+      let newWorkspace = await response.json()
+      setWorkspace(newWorkspace)
+      return newWorkspace
+    } catch (error) {
+      console.error("Error fetching workspace:", error)
+    }
+  }
+
+  const deleteWorkspace = async (workspace_id: any) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/workspace/${workspace_id}/`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      )
+
+      return response.json()
+    } catch (error) {
+      console.error("Error deleting workspace:", error)
+    }
+  }
 
   const fetchMarqueStats = async (
     marque: string,
@@ -201,8 +240,32 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const fetchMepAnalysis = async (
+    annonceur: string,
+    dateFrom: string,
+    dateTo: string,
+  ) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/datas/anonceur/${annonceur}/${dateFrom}/${dateTo}`,
+        { method: "GET" },
+      )
+      if (response.ok) {
+        const results = await response.json()
+        console.log("mep analysis", results)
+        setMepAnalysis(results)
+      }
+    } catch (error) {
+      console.error("Error fetching mep analysis:", error)
+    }
+  }
+
   function getPigeReportLink(sector: string, channel: string) {
     return `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/pige/${sector}/${channel}`
+  }
+
+  function getPigeReportLinkAdvertiser(sector: string, advertiser: string) {
+    return `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/pige/annonceur/${sector}/${advertiser}`
   }
 
   const fetchDatasByChaines = async (channel: string) => {
@@ -235,6 +298,56 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error fetch datas by chaines & sectors", error)
+    }
+  }
+
+  const fetchDatasByAnnonceurSector = async (
+    advertiser: string,
+    sector: string,
+  ) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/datas/annonceur/${advertiser}/sector/${sector}`,
+        { method: "GET" },
+      )
+      if (response.ok) {
+        const results = await response.json()
+        console.log("datas by annonceur & sector", results)
+        // setDatasByAnnonceurSector(results.datas)
+        setDatasByChaines(results.datas)
+      }
+    } catch (error) {
+      console.error("Error fetch datas by annonceur & sector", error)
+    }
+  }
+
+  const getRecommendation = async (
+    advertiser: string,
+    investmentAmount: number,
+    advertisementDuration: number,
+    dateFrom: string,
+    dateTo: string,
+  ) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/recommendation/${advertiser}/${investmentAmount}/${advertisementDuration}/${dateFrom}/${dateTo}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error("Error fetching recommendation:", error)
+      throw error
     }
   }
 
@@ -297,7 +410,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         fetchDatasByChaines,
         fetchDatasByChaineSector,
         datasByChaines,
+        fetchDatasByAnnonceurSector,
         getPigeReportLink,
+        updateWorkspace,
+        deleteWorkspace,
+        getRecommendation,
+        fetchMepAnalysis,
+        mepAnalysis,
+        getPigeReportLinkAdvertiser,
       }}
     >
       {children}

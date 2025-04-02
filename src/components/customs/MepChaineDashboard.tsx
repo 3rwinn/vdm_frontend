@@ -15,6 +15,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/Tabs"
 import { BarList } from "../BarList"
 import { ProgressCircle } from "@/components/ProgressCircle"
 import { DateRangePicker } from "../DatePicker"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/Select"
+import { fr } from "date-fns/locale"
+import { presets } from "@/lib/dateHelpers"
+
+
+
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(" ")
@@ -121,8 +133,12 @@ const valueFormatter = (number) =>
 const valueFormatterSimple = (number) =>
   `${Intl.NumberFormat("fr").format(number).toString()}`
 
+// Add this type definition for clarity
+type SectorAnalysisMode = "global" | "specific"
+
 function MepChaineDashboard({
   datas,
+  mode = "tv",
   workspace,
   dateRange,
   handleDateRangeChange,
@@ -227,6 +243,13 @@ function MepChaineDashboard({
           value={dateRange}
           onChange={handleDateRangeChange}
           className="w-60"
+          translations={{
+            cancel: "Annuler",
+            apply: "Appliquer",
+            range: "Intervalle de dates",
+          }}
+          locale={fr}
+          presets={presets}
         />
       </div>
       <section className="mt-12 text-center">
@@ -261,6 +284,10 @@ function MepChaineDashboard({
     },
   ]
 
+  // Inside the MepChaineDashboard component, add state for the analysis mode
+  const [sectorAnalysisMode, setSectorAnalysisMode] =
+    useState<SectorAnalysisMode>("specific")
+
   if (datas?.statut === "no_data") return emptyState
 
   if (!datas) return skeleton
@@ -279,7 +306,14 @@ function MepChaineDashboard({
             value={dateRange}
             onChange={handleDateRangeChange}
             className="w-60"
-          />
+            translations={{
+              cancel: "Annuler",
+              apply: "Appliquer",
+              range: "Intervalle de dates",
+            }}
+            locale={fr}
+            presets={presets}
+            />
         </div>
         <dl className="mt-6 grid grid-cols-1 gap-12 sm:grid-cols-3">
           <div key="1">
@@ -298,10 +332,12 @@ function MepChaineDashboard({
                 <li>
                   <p className="flex justify-between text-sm">
                     <span className="font-medium text-gray-900 dark:text-gray-50">
-                      TV
+                      {mode === "tv" ? "TV" : "RADIO"}
                     </span>
                     <span className="font-medium text-gray-500 dark:text-gray-50">
-                      {datas?.tv?.nombre_spots_total || 0}
+                      {mode === "tv"
+                        ? datas?.tv?.nombre_spots_total || 0
+                        : datas?.radio?.nombre_spots_total || 0}
                     </span>
                   </p>
                   <ProgressBar
@@ -373,7 +409,7 @@ function MepChaineDashboard({
                 <li>
                   <p className="flex justify-between text-sm">
                     <span className="font-medium text-gray-900 dark:text-gray-50">
-                      TV
+                      {mode === "tv" ? "TV" : "RADIO"}
                     </span>
                     <span className="font-medium text-gray-500 dark:text-gray-50">
                       {new Intl.NumberFormat("fr-FR", {
@@ -385,9 +421,13 @@ function MepChaineDashboard({
                   <ProgressBar
                     variant="indigo"
                     value={
-                      (datas?.tv?.total_valorization /
-                        datas?.general?.total_valorization) *
-                      100
+                      mode === "tv"
+                        ? (datas?.tv?.total_valorization /
+                            datas?.general?.total_valorization) *
+                          100
+                        : (datas?.radio?.total_valorization /
+                            datas?.general?.total_valorization) *
+                          100
                     }
                     className="mt-2 [&>*]:h-1.5"
                   />
@@ -471,7 +511,9 @@ function MepChaineDashboard({
                       // "h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-500",
                       "h-1.5 rounded-full bg-purple-600 dark:bg-purple-500",
                     )}
-                    style={{ width: `${tvPercentage}%` }}
+                    style={{
+                      width: `${mode === "tv" ? tvPercentage : radioPercentage}%`,
+                    }}
                   />
 
                   <div
@@ -491,31 +533,59 @@ function MepChaineDashboard({
               </div>
 
               <ul role="list" className="mt-5 space-y-2">
-                <li className="flex items-center gap-2 text-xs">
-                  <span
-                    className={cx(
-                      // "size-2.5 rounded-sm bg-indigo-600 dark:bg-indigo-500",
-                      "size-2.5 rounded-sm bg-purple-600 dark:bg-purple-500",
-                    )}
-                    aria-hidden="true"
-                  />
-                  <span className="font-medium text-gray-900 dark:text-gray-50">
-                    TV
-                  </span>
-                  <span className="text-gray-600 dark:text-gray-400">
-                    {datas?.tv?.duree_commercial_total
-                      ?.split("/")
-                      .map((value, index) => {
-                        const labels = ["j", "h", "m", "s"]
-                        return (
-                          <React.Fragment key={index}>
-                            {value} {labels[index]}{" "}
-                          </React.Fragment>
-                        )
-                      })}{" "}
-                    / {Math.round(tvPercentage) || 0}%
-                  </span>
-                </li>
+                {mode === "tv" && (
+                  <li className="flex items-center gap-2 text-xs">
+                    <span
+                      className={cx(
+                        // "size-2.5 rounded-sm bg-indigo-600 dark:bg-indigo-500",
+                        "size-2.5 rounded-sm bg-purple-600 dark:bg-purple-500",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="font-medium text-gray-900 dark:text-gray-50">
+                      TV
+                    </span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {datas?.tv?.duree_commercial_total
+                        ?.split("/")
+                        .map((value, index) => {
+                          const labels = ["j", "h", "m", "s"]
+                          return (
+                            <React.Fragment key={index}>
+                              {value} {labels[index]}{" "}
+                            </React.Fragment>
+                          )
+                        })}{" "}
+                      / {Math.round(tvPercentage) || 0}%
+                    </span>
+                  </li>
+                )}
+                {mode === "radio" && (
+                  <li className="flex items-center gap-2 text-xs">
+                    <span
+                      className={cx(
+                        "size-2.5 rounded-sm bg-gray-500 dark:bg-gray-400",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="font-medium text-gray-900 dark:text-gray-50">
+                      RADIO
+                    </span>
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {datas?.radio?.duree_commercial_total
+                        ?.split("/")
+                        .map((value, index) => {
+                          const labels = ["j", "h", "m", "s"]
+                          return (
+                            <React.Fragment key={index}>
+                              {value} {labels[index]}{" "}
+                            </React.Fragment>
+                          )
+                        })}{" "}
+                      / {Math.round(radioPercentage) || 0}%
+                    </span>
+                  </li>
+                )}
                 <li className="flex items-center gap-2 text-xs">
                   <span
                     className={cx(
@@ -541,30 +611,6 @@ function MepChaineDashboard({
                     / {Math.round(channelPercentage) || 0}%
                   </span>
                 </li>
-                {/* <li className="flex items-center gap-2 text-xs">
-                  <span
-                    className={cx(
-                      "size-2.5 rounded-sm bg-gray-500 dark:bg-gray-400",
-                    )}
-                    aria-hidden="true"
-                  />
-                  <span className="font-medium text-gray-900 dark:text-gray-50">
-                    RADIO
-                  </span>
-                  <span className="text-gray-600 dark:text-gray-400">
-                    {datas?.radio?.duree_commercial_total
-                      ?.split("/")
-                      .map((value, index) => {
-                        const labels = ["j", "h", "m", "s"]
-                        return (
-                          <React.Fragment key={index}>
-                            {value} {labels[index]}{" "}
-                          </React.Fragment>
-                        )
-                      })}{" "}
-                    / {Math.round(radioPercentage) || 0}%
-                  </span>
-                </li> */}
               </ul>
             </div>
           </div>
@@ -642,267 +688,309 @@ function MepChaineDashboard({
       </section>
 
       <section className="mt-12">
-        <h1 className="scroll-mt-8 text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
-          {/* Analyse sectorielle: {workspace?.sector_activity} */}
-          Analyse sectorielle {workspace?.sector_activity}
-        </h1>
-
-        <div className="mt-6">
-          <div className="flex items-center gap-2">
-            <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
-              Nombre de spots et valorisation par jour sur le secteur
-            </dt>
-          </div>
-          <ComboChart
-            data={sectorToComboChartData(datas?.sector?.daily_metrics)}
-            className="h-64"
-            index="date"
-            enableBiaxial={true}
-            barSeries={{
-              categories: ["Spots"],
-              yAxisLabel: "Spots (Bars)",
-              colors: ["indigo"],
-            }}
-            lineSeries={{
-              categories: ["Valorisation"],
-              showYAxis: true,
-              yAxisLabel: "Valorisation (Line)",
-              colors: ["gray"],
-              yAxisWidth: 60,
-              valueFormatter: (number: number) =>
-                `${Intl.NumberFormat("fr").format(number).toString()} FCFA`,
-            }}
-          />
+        <div className="flex items-center gap-4">
+          <h1 className="scroll-mt-8 text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
+            Analyse sectorielle{" "}
+            {/* {sectorAnalysisMode === "specific" && workspace?.sector_activity} */}
+          </h1>
+          <Select
+            value={sectorAnalysisMode}
+            onValueChange={(value: SectorAnalysisMode) =>
+              setSectorAnalysisMode(value)
+            }
+          >
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sélectionner le mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="global">GLOBALE</SelectItem>
+              <SelectItem value="specific">
+                {workspace?.sector_activity}
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div className="mt-6 grid grid-cols-1 gap-12 sm:grid-cols-2">
-          {/* <div>
-            <div className="flex flex-col justify-between">
-              <div className="flex items-center gap-2">
-                <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
-                  Nombre total de spots sur le secteur
-                </dt>
-              </div>
-              <DonutChart
-                data={[
-                  ...channelToDonutChartData(datas?.sector?.channel_metrics),
-                  { name: "Total", spots: datas?.channel?.nombre_spots_total },
-                ]}
-                category="name"
-                value="spots"
-                colors={["indigo", "gray"]}
-                className="mx-auto mt-8"
-                // showLabel={true}
-                // valueFormatter={valueFormatter}
-              />
-              <div className="mt-4 text-center">
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                  {datas?.sector?.channel_metrics?.spots[0]} /{" "}
-                  {datas?.channel?.nombre_spots_total}
-                </p>
-                <Label
-                  htmlFor="spend-mgmt"
-                  className="text-gray-500 dark:text-gray-500"
-                >
-                  Ce nombre représente{" "}
-                  {Math.round(
-                    (datas?.sector?.channel_metrics?.spots[0] * 100) /
-                      datas?.channel?.nombre_spots_total,
-                  )}
-                  &#37; du total des spots de {workspace?.id_client}
-                </Label>
+
+        {sectorAnalysisMode === "global" ? (
+          <div className="mt-6 grid grid-cols-1 gap-12 sm:grid-cols-3">
+            <div>
+              <div className="flex flex-col justify-between">
+                <div className="flex items-center gap-2">
+                  <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
+                    Classement des secteurs par spots
+                  </dt>
+                </div>
+                <div className="mt-6" />
+                <BarList
+                  data={datas?.sector_stats?.by_spots.map((item) => ({
+                    name: item.sector,
+                    value: item.value,
+                  }))}
+                  valueFormatter={valueFormatterSimple}
+                />
               </div>
             </div>
-          </div> */}
-          <div>
-            <div className="flex flex-col justify-between">
+            <div>
+              <div className="flex flex-col justify-between">
+                <div className="flex items-center gap-2">
+                  <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
+                    Classement des secteurs par valorisation
+                  </dt>
+                </div>
+                <div className="mt-6" />
+                <BarList
+                  data={datas?.sector_stats?.by_valorisation.map((item) => ({
+                    name: item.sector,
+                    value: parseInt(item.value.replace(/\s/g, "")),
+                  }))}
+                  valueFormatter={valueFormatter}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex flex-col justify-between">
+                <div className="flex items-center gap-2">
+                  <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
+                    Classement des secteurs par durée
+                  </dt>
+                </div>
+                <div className="mt-6" />
+                <BarList
+                  data={datas?.sector_stats?.by_duration.map((item) => ({
+                    name: item.sector,
+                    value: item.value,
+                  }))}
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-6">
               <div className="flex items-center gap-2">
                 <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
-                  Vaorisation & nombre total de spots sur le secteur
+                  Nombre de spots et valorisation par jour sur le secteur
                 </dt>
               </div>
+              <ComboChart
+                data={sectorToComboChartData(datas?.sector?.daily_metrics)}
+                className="h-64"
+                index="date"
+                enableBiaxial={true}
+                barSeries={{
+                  categories: ["Spots"],
+                  yAxisLabel: "Spots (Bars)",
+                  colors: ["indigo"],
+                }}
+                lineSeries={{
+                  categories: ["Valorisation"],
+                  showYAxis: true,
+                  yAxisLabel: "Valorisation (Line)",
+                  colors: ["gray"],
+                  yAxisWidth: 60,
+                  valueFormatter: (number: number) =>
+                    `${Intl.NumberFormat("fr").format(number).toString()} FCFA`,
+                }}
+              />
+            </div>
+            <div className="mt-6 grid grid-cols-1 gap-12 sm:grid-cols-2">
+              <div>
+                <div className="flex flex-col justify-between">
+                  <div className="flex items-center gap-2">
+                    <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
+                      Valorisation & nombre total de spots sur le secteur
+                    </dt>
+                  </div>
 
-              <div className="items-start p-6 sm:flex sm:flex-wrap sm:items-center sm:space-x-0 sm:space-y-4 sm:p-0 sm:pt-6">
-                <ProgressCircle
-                  value={Math.round(
-                    (datas?.sector?.channel_metrics?.spots[0] * 100) /
-                      datas?.channel?.nombre_spots_total,
-                  )}
-                  radius={70}
-                  strokeWidth={7}
-                >
-                  <ProgressCircle
-                    value={Math.round(
-                      (datas?.sector?.channel_metrics?.valorisation[0] * 100) /
-                        datas?.channel?.total_valorization,
-                    )}
-                    radius={60}
-                    strokeWidth={7}
-                    variant={"neutral"}
-                  >
-                    {/* <span>Repartition spot & valorisation</span> */}
-                  </ProgressCircle>
-                </ProgressCircle>
-                <ul role="list" className="mt-4 w-full sm:mt-0">
-                  <li
-                    key={"spot"}
-                    className="rounded-tremor-small hover:bg-tremor-background-muted hover:dark:bg-dark-tremor-background-subtle relative px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={classNames(
-                            "bg-indigo-500",
-                            "size-2.5 rounded-sm",
-                          )}
-                          aria-hidden={true}
-                        />
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                          <a href={"#"} className="focus:outline-none">
-                            {/* Extend touch target to entire panel */}
-                            <span
-                              className="absolute inset-0"
-                              aria-hidden={true}
-                            />
-                            Taux spots secteur
-                          </a>
-                        </p>
-                      </div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                        {Math.round(
-                          (datas?.sector?.channel_metrics?.spots[0] * 100) /
-                            datas?.channel?.nombre_spots_total,
-                        )}
-                        &#37;
-                      </p>
-                    </div>
-                    <ul
-                      role="list"
-                      className="divide-y divide-gray-200 text-sm text-gray-500 dark:divide-gray-800 dark:text-gray-500"
+                  <div className="items-start p-6 sm:flex sm:flex-wrap sm:items-center sm:space-x-0 sm:space-y-4 sm:p-0 sm:pt-6">
+                    <ProgressCircle
+                      value={Math.round(
+                        (datas?.sector?.channel_metrics?.spots[0] * 100) /
+                          datas?.channel?.nombre_spots_total,
+                      )}
+                      radius={70}
+                      strokeWidth={7}
                     >
-                      <li
-                        key="spot"
-                        className="flex items-center justify-between py-2"
-                      >
-                        <span>Nb spots secteur</span>
-                        <span>{datas?.sector?.channel_metrics?.spots[0]}</span>
-                      </li>
-
-                      <li
-                        key="spot"
-                        className="flex items-center justify-between py-2"
-                      >
-                        <span>Nb spots {workspace?.id_client}</span>
-                        <span>{datas?.channel?.nombre_spots_total}</span>
-                      </li>
-                    </ul>
-                  </li>
-                  <li
-                    key={"spot"}
-                    className="rounded-tremor-small hover:bg-tremor-background-muted hover:dark:bg-dark-tremor-background-subtle relative px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span
-                          className={classNames(
-                            "bg-gray-500",
-                            "size-2.5 rounded-sm",
-                          )}
-                          aria-hidden={true}
-                        />
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                          <a href={"#"} className="focus:outline-none">
-                            {/* Extend touch target to entire panel */}
-                            <span
-                              className="absolute inset-0"
-                              aria-hidden={true}
-                            />
-                            Taux valorisation secteur
-                          </a>
-                        </p>
-                      </div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                        {Math.round(
+                      <ProgressCircle
+                        value={Math.round(
                           (datas?.sector?.channel_metrics?.valorisation[0] *
                             100) /
                             datas?.channel?.total_valorization,
                         )}
-                        &#37;
-                      </p>
-                    </div>
-                    <ul
-                      role="list"
-                      className="divide-y divide-gray-200 text-sm text-gray-500 dark:divide-gray-800 dark:text-gray-500"
-                    >
-                      <li
-                        key="spot"
-                        className="flex items-center justify-between py-2"
+                        radius={60}
+                        strokeWidth={7}
+                        variant={"neutral"}
                       >
-                        <span>Valorisation secteur</span>
-                        <span>
-                          {valueFormatter(
-                            datas?.sector?.channel_metrics?.valorisation[0],
-                          )}
-                        </span>
-                      </li>
+                        {/* <span>Repartition spot & valorisation</span> */}
+                      </ProgressCircle>
+                    </ProgressCircle>
+                    <ul role="list" className="mt-4 w-full sm:mt-0">
+                      <li
+                        key={"spot"}
+                        className="rounded-tremor-small hover:bg-tremor-background-muted hover:dark:bg-dark-tremor-background-subtle relative px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={classNames(
+                                "bg-indigo-500",
+                                "size-2.5 rounded-sm",
+                              )}
+                              aria-hidden={true}
+                            />
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                              <a href={"#"} className="focus:outline-none">
+                                {/* Extend touch target to entire panel */}
+                                <span
+                                  className="absolute inset-0"
+                                  aria-hidden={true}
+                                />
+                                Taux spots secteur
+                              </a>
+                            </p>
+                          </div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                            {Math.round(
+                              (datas?.sector?.channel_metrics?.spots[0] * 100) /
+                                datas?.channel?.nombre_spots_total,
+                            )}
+                            &#37;
+                          </p>
+                        </div>
+                        <ul
+                          role="list"
+                          className="divide-y divide-gray-200 text-sm text-gray-500 dark:divide-gray-800 dark:text-gray-500"
+                        >
+                          <li
+                            key="spot"
+                            className="flex items-center justify-between py-2"
+                          >
+                            <span>Nb spots secteur</span>
+                            <span>
+                              {datas?.sector?.channel_metrics?.spots[0]}
+                            </span>
+                          </li>
 
+                          <li
+                            key="spot"
+                            className="flex items-center justify-between py-2"
+                          >
+                            <span>Nb spots {workspace?.id_client}</span>
+                            <span>{datas?.channel?.nombre_spots_total}</span>
+                          </li>
+                        </ul>
+                      </li>
                       <li
-                        key="spot"
-                        className="flex items-center justify-between py-2"
+                        key={"spot"}
+                        className="rounded-tremor-small hover:bg-tremor-background-muted hover:dark:bg-dark-tremor-background-subtle relative px-3 py-2"
                       >
-                        <span>Valorisation {workspace?.id_client}</span>
-                        <span>
-                          {valueFormatter(datas?.channel?.total_valorization)}
-                        </span>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span
+                              className={classNames(
+                                "bg-gray-500",
+                                "size-2.5 rounded-sm",
+                              )}
+                              aria-hidden={true}
+                            />
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                              <a href={"#"} className="focus:outline-none">
+                                {/* Extend touch target to entire panel */}
+                                <span
+                                  className="absolute inset-0"
+                                  aria-hidden={true}
+                                />
+                                Taux valorisation secteur
+                              </a>
+                            </p>
+                          </div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                            {Math.round(
+                              (datas?.sector?.channel_metrics?.valorisation[0] *
+                                100) /
+                                datas?.channel?.total_valorization,
+                            )}
+                            &#37;
+                          </p>
+                        </div>
+                        <ul
+                          role="list"
+                          className="divide-y divide-gray-200 text-sm text-gray-500 dark:divide-gray-800 dark:text-gray-500"
+                        >
+                          <li
+                            key="spot"
+                            className="flex items-center justify-between py-2"
+                          >
+                            <span>Valorisation secteur</span>
+                            <span>
+                              {valueFormatter(
+                                datas?.sector?.channel_metrics?.valorisation[0],
+                              )}
+                            </span>
+                          </li>
+
+                          <li
+                            key="spot"
+                            className="flex items-center justify-between py-2"
+                          >
+                            <span>Valorisation {workspace?.id_client}</span>
+                            <span>
+                              {valueFormatter(
+                                datas?.channel?.total_valorization,
+                              )}
+                            </span>
+                          </li>
+                        </ul>
                       </li>
                     </ul>
-                  </li>
-                </ul>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <Tabs defaultValue={classementAnnonceur[1].name}>
+                  <div className="flex flex-col justify-between">
+                    <div className="flex items-center gap-2">
+                      <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
+                        Classement des annonceurs sur le secteur
+                      </dt>
+                    </div>
+                    <div className="mt-6">
+                      <TabsList
+                        variant="solid"
+                        className="overflow-visible bg-transparent p-0 dark:bg-transparent"
+                      >
+                        {classementAnnonceur.map((item, index) => (
+                          <TabsTrigger
+                            key={index}
+                            value={item.name}
+                            className="rounded-md data-[state=active]:ring-1 data-[state=active]:ring-inset data-[state=active]:ring-gray-200 data-[state=active]:dark:ring-gray-800"
+                          >
+                            {item.name}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </div>
+                    <div className="mt-6">
+                      {classementAnnonceur?.map((item) => (
+                        <TabsContent key={item.name} value={item.name}>
+                          <BarList
+                            data={item.data}
+                            valueFormatter={
+                              item.category === "spot"
+                                ? valueFormatterSimple
+                                : valueFormatter
+                            }
+                          />
+                        </TabsContent>
+                      ))}
+                    </div>
+                  </div>
+                </Tabs>
               </div>
             </div>
-          </div>
-
-          <div>
-            <Tabs defaultValue={classementAnnonceur[1].name}>
-              <div className="flex flex-col justify-between">
-                <div className="flex items-center gap-2">
-                  <dt className="font-bold text-gray-900 sm:text-sm dark:text-gray-50">
-                    Classement des annonceurs sur le secteur
-                  </dt>
-                </div>
-                <div className="mt-6">
-                  <TabsList
-                    variant="solid"
-                    className="overflow-visible bg-transparent p-0 dark:bg-transparent"
-                  >
-                    {classementAnnonceur.map((item, index) => (
-                      <TabsTrigger
-                        key={index}
-                        value={item.name}
-                        className="rounded-md data-[state=active]:ring-1 data-[state=active]:ring-inset data-[state=active]:ring-gray-200 data-[state=active]:dark:ring-gray-800"
-                      >
-                        {item.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-                <div className="mt-6">
-                  {classementAnnonceur?.map((item) => (
-                    <TabsContent key={item.name} value={item.name}>
-                      <BarList
-                        data={item.data}
-                        valueFormatter={
-                          item.category === "spot"
-                            ? valueFormatterSimple
-                            : valueFormatter
-                        }
-                      />
-                    </TabsContent>
-                  ))}
-                </div>
-              </div>
-            </Tabs>
-          </div>
-        </div>
+          </>
+        )}
       </section>
     </>
   )
