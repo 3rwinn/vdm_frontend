@@ -1,478 +1,676 @@
-import { useEffect, useState } from "react"
-import { CalendarClock, Filter, LogOut, Menu, Sparkles, TrendingUp } from "lucide-react"
-import { useLocation, useNavigate, useParams } from "react-router-dom"
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
-import { DashboardShell } from "@/components/layouts/dashboard-shell"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { useAuth } from "@/hooks/use-auth"
-import { type WorkspaceResponse } from "@/lib/api"
+import { DashboardShell } from "@/components/layouts/dashboard-shell";
+import { Button } from "@/components/ui/button";
 import {
-  clearSelectedWorkspace,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  fetchBrandsBySector,
+  fetchChainsBySector,
+  fetchDeepDiveAnalysis,
+  fetchSectors,
+  type WorkspaceResponse,
+} from "@/lib/api";
+import { cn } from "@/lib/utils";
+import {
   getStoredWorkspace,
   persistSelectedWorkspace,
   rememberWorkspaceId,
-} from "@/lib/workspaces"
-import { buildPath, paths } from "@/routes/paths"
+} from "@/lib/workspaces";
+import { buildPath, paths } from "@/routes/paths";
+import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown";
+import { MetvDashboard } from "@/pages/dashboard/metv-dashboard";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-
-interface StatCardProps {
-  title: string
-  metric: string
-  metaLabel: string
-  gradient?: boolean
-  recent: Array<{ channel: string; value: string; label?: string }>
-}
-
-function StatCard({ title, metric, metaLabel, gradient, recent }: StatCardProps) {
-  return (
-    <Card className="rounded-3xl border-none bg-white shadow-lg">
-      <CardContent className="space-y-6 p-6">
-        <div
-          className={gradient
-            ? "rounded-2xl bg-gradient-to-br from-[#0d7f93] via-[#0a617a] to-[#09455f] p-5 text-white"
-            : "rounded-2xl bg-muted/40 p-5"}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide opacity-80">{title}</p>
-              <p className="mt-2 text-3xl font-semibold">{metric}</p>
-            </div>
-            <Sparkles className="h-5 w-5 opacity-80" />
-          </div>
-        </div>
-        <div className="space-y-4 text-sm text-muted-foreground">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{metaLabel}</p>
-          <div className="space-y-3">
-            {recent.map((item) => (
-              <div key={`${item.channel}-${item.value}`} className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/60">
-                    <CalendarClock className="h-5 w-5 text-[#0c6e85]" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{item.channel}</p>
-                    <p className="text-xs text-muted-foreground/70">{item.label ?? "Aujourd'hui, 16h36"}</p>
-                  </div>
-                </div>
-                <p className="text-sm font-semibold text-foreground">{item.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Settings2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function DashboardPage() {
-  const { workspaceId } = useParams<{ workspaceId: string }>()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, tokens } = useAuth();
 
-  const locationState = location.state as { workspace?: WorkspaceResponse } | null
-  const workspaceFromState = locationState?.workspace
+  const locationState = location.state as {
+    workspace?: WorkspaceResponse;
+  } | null;
+  const workspaceFromState = locationState?.workspace;
 
-  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceResponse | null>(
-    workspaceFromState ?? getStoredWorkspace().workspace ?? null
-  )
-
-  useEffect(() => {
-    if (workspaceFromState) {
-      persistSelectedWorkspace(workspaceFromState)
-      setSelectedWorkspace(workspaceFromState)
-      return
-    }
-
-    const stored = getStoredWorkspace()
-    if (stored.workspace) {
-      setSelectedWorkspace(stored.workspace)
-    }
-  }, [workspaceFromState])
+  const {
+    selectedWorkspace,
+    selectWorkspace,
+    workspaces,
+    loading: loadingWorkspaces,
+  } = useWorkspaceDropdown({
+    accessToken: tokens?.access,
+    initialWorkspace: workspaceFromState,
+    workspaceId,
+  });
 
   useEffect(() => {
     if (workspaceId) {
       if (workspaceFromState) {
-        persistSelectedWorkspace(workspaceFromState)
+        persistSelectedWorkspace(workspaceFromState);
       } else {
-        rememberWorkspaceId(workspaceId)
+        rememberWorkspaceId(workspaceId);
       }
-      return
+      return;
     }
 
-    const stored = getStoredWorkspace()
+    const stored = getStoredWorkspace();
     if (stored.workspaceId) {
-      navigate(buildPath.dashboard(stored.workspaceId), { replace: true })
+      navigate(buildPath.dashboard(stored.workspaceId), { replace: true });
     } else {
-      navigate(paths.workspaces, { replace: true })
+      navigate(paths.workspaces, { replace: true });
     }
-  }, [workspaceId, workspaceFromState, navigate])
+  }, [workspaceId, workspaceFromState, navigate]);
 
-  const workspaceLabel = selectedWorkspace?.name ?? (workspaceId ? `Workspace #${workspaceId}` : "Aucun workspace sélectionné")
+  const [ddaData, setDdaData] = useState(null);
+  const [ddaError, setDdaError] = useState<string | null>(null);
+  const [ddaLoading, setDdaLoading] = useState(false);
+
+  const [selectedSectorOverride, setSelectedSectorOverride] = useState<string | null>(null);
+  const [selectedChannelOverride, setSelectedChannelOverride] = useState<string | null>(null);
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const [sectorOptions, setSectorOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [sectorLoading, setSectorLoading] = useState(false);
+  const [sectorError, setSectorError] = useState<string | null>(null);
+  const [channelOptions, setChannelOptions] = useState<Array<{ label: string; value: string }>>([]);
+  const [channelLoading, setChannelLoading] = useState(false);
+  const [channelError, setChannelError] = useState<string | null>(null);
+  const [modalSectorValue, setModalSectorValue] = useState("");
+  const [modalChannelValue, setModalChannelValue] = useState("");
+
+  console.log("ddaData", ddaData);
+
+  const workspaceProducts = useMemo(
+    () => selectedWorkspace?.products_details ?? [],
+    [selectedWorkspace?.products_details]
+  );
+  const activeProduct = workspaceProducts[0] ?? null;
+  const productCode = activeProduct?.code
+    ? String(activeProduct.code).toLowerCase()
+    : null;
+  const requiresBrandSelect = useMemo(() => productCode === "mep", [productCode]);
+
+  console.log("workspaceProducts", workspaceProducts);
+
+  const channelSelectLabel = useMemo(
+    () => (requiresBrandSelect ? "Marque / produit" : "Chaîne"),
+    [requiresBrandSelect]
+  );
+  const channelPlaceholder = requiresBrandSelect
+    ? "Sélectionnez une marque"
+    : "Sélectionnez une chaîne";
+
+  useEffect(() => {
+    if (productCode !== "metv" || !tokens?.access) {
+      setSectorOptions([]);
+      setSectorError(null);
+      setSectorLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    setSectorLoading(true);
+    setSectorError(null);
+
+    fetchSectors(tokens.access)
+      .then((response) => {
+        if (!active) return;
+        const options = (response.sectors ?? []).map((sectorName) => ({
+          value: sectorName,
+          label:
+            sectorName.charAt(0).toUpperCase() +
+            sectorName.slice(1).toLowerCase(),
+        }));
+        setSectorOptions(options);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setSectorError(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les secteurs."
+        );
+        setSectorOptions([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setSectorLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [tokens?.access, productCode]);
+
+  const loadChannelOptions = useCallback(
+    async (sectorValue: string, preselected?: string) => {
+      if (productCode !== "metv") {
+        setChannelOptions([]);
+        setChannelError(null);
+        setChannelLoading(false);
+        return;
+      }
+
+      if (!tokens?.access || !sectorValue) {
+        setChannelOptions([]);
+        return;
+      }
+
+      setChannelLoading(true);
+      setChannelError(null);
+
+      try {
+        const activeChannel = preselected ?? modalChannelValue;
+
+        if (requiresBrandSelect) {
+          const response = await fetchBrandsBySector(sectorValue, tokens.access);
+          const brands = response.marques ?? [];
+          const mapped = brands.map((brand) => ({
+            value: brand,
+            label: brand,
+          }));
+          const next = [...mapped];
+          if (
+            activeChannel &&
+            !next.some((option) => option.value === activeChannel)
+          ) {
+            next.unshift({
+              value: activeChannel,
+              label: activeChannel,
+            });
+          }
+          setChannelOptions(next);
+        } else {
+          const response = await fetchChainsBySector(sectorValue, tokens.access);
+          const chains = response.chaines ?? [];
+          const mapped = chains.map((chain) => ({
+            value: chain,
+            label: chain,
+          }));
+          const next = [...mapped];
+          if (
+            activeChannel &&
+            !next.some((option) => option.value === activeChannel)
+          ) {
+            next.unshift({
+              value: activeChannel,
+              label: activeChannel,
+            });
+          }
+          setChannelOptions(next);
+        }
+      } catch (error) {
+        setChannelError(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les chaînes."
+        );
+        setChannelOptions([]);
+      } finally {
+        setChannelLoading(false);
+      }
+    },
+    [tokens?.access, requiresBrandSelect, modalChannelValue, productCode]
+  );
+
+  useEffect(() => {
+    if (!filterDialogOpen) {
+      return;
+    }
+
+    if (!modalSectorValue) {
+      setChannelOptions([]);
+      setChannelError(null);
+      return;
+    }
+
+    loadChannelOptions(modalSectorValue, modalChannelValue);
+  }, [filterDialogOpen, modalSectorValue, modalChannelValue, loadChannelOptions]);
+
+  useEffect(() => {
+    setSelectedSectorOverride(null);
+    setSelectedChannelOverride(null);
+    setModalSectorValue("");
+    setModalChannelValue("");
+    setChannelOptions([]);
+    setChannelError(null);
+    setFilterDialogOpen(false);
+  }, [selectedWorkspace?.id]);
+
+  useEffect(() => {
+    if (!selectedWorkspace || !tokens?.access) {
+      setDdaData(null);
+      return;
+    }
+
+    if (productCode !== "metv") {
+      setDdaData(null);
+      return;
+    }
+
+    const sector =
+      selectedSectorOverride ?? selectedWorkspace.sector_activity ?? "";
+    const channel =
+      selectedChannelOverride ?? selectedWorkspace.id_client ?? "";
+
+    if (!sector || !channel) {
+      setDdaData(null);
+      return;
+    }
+
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(end.getDate() - 2030);
+
+    const format = (date: Date) => date.toISOString().split("T")[0];
+    setDdaLoading(true);
+    setDdaError(null);
+
+    fetchDeepDiveAnalysis("metv", sector, channel, format(start), format(end))
+      .then((response) => {
+        setDdaData(response);
+        console.log("Deep Dive Analysis response:", response);
+      })
+      .catch((error) => {
+        console.error("Failed to fetch deep dive analysis:", error);
+        setDdaError(
+          error instanceof Error ? error.message : "Analyse indisponible"
+        );
+        setDdaData(null);
+      })
+      .finally(() => setDdaLoading(false));
+  }, [
+    selectedWorkspace,
+    tokens?.access,
+    selectedSectorOverride,
+    selectedChannelOverride,
+    productCode,
+  ]);
+
+  const workspaceLabel = useMemo(() => {
+    if (selectedWorkspace) {
+      return selectedWorkspace.name;
+    }
+    if (workspaceId) {
+      return `Workspace #${workspaceId}`;
+    }
+    return "Aucun workspace sélectionné";
+  }, [selectedWorkspace, workspaceId]);
+
+  const handleWorkspaceSelect = (workspace: WorkspaceResponse) => {
+    selectWorkspace(workspace);
+    const isSame = workspaceId ? String(workspace.id) === workspaceId : false;
+    navigate(buildPath.dashboard(workspace.id), { replace: isSame });
+  };
+
+  const effectiveSector =
+    selectedSectorOverride ?? selectedWorkspace?.sector_activity ?? "";
+  const effectiveChannel =
+    selectedChannelOverride ?? selectedWorkspace?.id_client ?? "";
+  const isCustomFilterActive = Boolean(
+    selectedSectorOverride || selectedChannelOverride
+  );
+
+  const handleOpenFilterDialog = () => {
+    if (!selectedWorkspace) {
+      return;
+    }
+
+    const baseSector =
+      selectedSectorOverride ?? selectedWorkspace.sector_activity ?? "";
+    const baseChannel =
+      selectedChannelOverride ?? selectedWorkspace.id_client ?? "";
+
+    setModalSectorValue(baseSector);
+    setModalChannelValue(baseChannel);
+    setFilterDialogOpen(true);
+
+    if (baseSector) {
+      loadChannelOptions(baseSector, baseChannel);
+    } else {
+      setChannelOptions([]);
+    }
+  };
+
+  const handleApplyFilters = () => {
+    if (!modalSectorValue || !modalChannelValue) {
+      toast.error("Merci de sélectionner un secteur et une chaîne.");
+      return;
+    }
+
+    setSelectedSectorOverride(modalSectorValue);
+    setSelectedChannelOverride(modalChannelValue);
+    setFilterDialogOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    if (!selectedWorkspace) {
+      setSelectedSectorOverride(null);
+      setSelectedChannelOverride(null);
+      setModalSectorValue("");
+      setModalChannelValue("");
+      setFilterDialogOpen(false);
+      return;
+    }
+
+    const defaultSector = selectedWorkspace.sector_activity ?? "";
+    const defaultChannel = selectedWorkspace.id_client ?? "";
+
+    setSelectedSectorOverride(null);
+    setSelectedChannelOverride(null);
+    setModalSectorValue(defaultSector);
+    setModalChannelValue(defaultChannel);
+    setChannelError(null);
+    if (defaultSector) {
+      loadChannelOptions(defaultSector, defaultChannel);
+    } else {
+      setChannelOptions([]);
+    }
+  };
+
+  const channelIdentifier = effectiveChannel;
+  const sectorIdentifier = effectiveSector;
+
+  if (!selectedWorkspace) {
+    return (
+      <DashboardShell>
+        <div className="flex h-full flex-1 items-center justify-center">
+          <p className="text-sm text-muted-foreground">
+            Sélectionnez un workspace pour afficher un dashboard.
+          </p>
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
     <DashboardShell>
       <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-[#0c6e85]">Salut {user?.first_name ?? "Utilisateur"},</p>
-          <h1 className="text-3xl font-semibold text-foreground">Bienvenue sur VDM !</h1>
-          <p className="text-sm text-muted-foreground">
-            Espace courant : <span className="font-semibold text-foreground">{workspaceLabel}</span>
+          <p className="text-sm font-medium text-[#0c6e85]">
+            Salut {user?.first_name ?? "Utilisateur"},
           </p>
+          <h1 className="text-3xl font-semibold text-foreground">
+            Bienvenue sur VDM !
+          </h1>
         </div>
-        <div className="flex w-full items-center justify-end">
-          <Button
-            type="button"
-            onClick={() => {
-              logout()
-              clearSelectedWorkspace()
-              navigate(paths.login, { replace: true })
-            }}
-            className="flex items-center gap-2 rounded-full bg-[#0c6e85] px-5 py-2 text-sm font-semibold text-white shadow hover:bg-[#0b6174]"
-          >
-            <LogOut className="h-4 w-4" />
-            Déconnexion
-          </Button>
+        <div className="flex w-full flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="group inline-flex items-center gap-2 rounded-full border border-border/60 bg-white px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:border-[#0c6e85]/40"
+                >
+                  <span className="text-muted-foreground">Espace courant :</span>
+                  <span className="max-w-[220px] truncate font-semibold text-foreground">
+                    {workspaceLabel}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-72">
+                <DropdownMenuLabel>Vos espaces</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {loadingWorkspaces ? (
+                  <DropdownMenuItem disabled>Chargement…</DropdownMenuItem>
+                ) : workspaces.length === 0 ? (
+                  <DropdownMenuItem disabled>
+                    Aucun workspace disponible
+                  </DropdownMenuItem>
+                ) : (
+                  workspaces.map((workspace) => {
+                    const isActive = selectedWorkspace?.id === workspace.id;
+                    return (
+                      <DropdownMenuItem
+                        key={workspace.id}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          handleWorkspaceSelect(workspace);
+                        }}
+                        className={cn(
+                          "flex flex-col items-start gap-0.5",
+                          isActive &&
+                            "bg-[#0c6e85]/10 text-[#0c6e85] focus:bg-[#0c6e85]/10"
+                        )}
+                      >
+                        <span className="text-sm font-semibold">
+                          {workspace.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {workspace.type_client ??
+                            "Type d’organisation indéterminé"}
+                        </span>
+                      </DropdownMenuItem>
+                    );
+                  })
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    navigate(paths.workspaces);
+                  }}
+                >
+                  Gérer mes workspaces
+                  <DropdownMenuShortcut>↗</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {productCode === "metv" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleOpenFilterDialog}
+                className={cn(
+                  "h-10 w-10 rounded-xl border border-border/60 bg-white text-muted-foreground shadow-sm transition hover:border-[#0c6e85]/40 hover:text-[#0c6e85]",
+                  isCustomFilterActive &&
+                    "border-[#0c6e85] bg-[#0c6e85]/10 text-[#0c6e85]"
+                )}
+              >
+                <Settings2 className="h-4 w-4" />
+                <span className="sr-only">Modifier les filtres DDA</span>
+              </Button>
+            ) : null}
+          </div>
+          {productCode === "metv" && isCustomFilterActive ? (
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
+              Filtres personnalisés actifs
+            </span>
+          ) : null}
         </div>
       </header>
-
-      <section className="mt-10 flex flex-col gap-4 rounded-3xl bg-white p-4 shadow lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            className="flex items-center gap-2 rounded-full bg-[#0c6e85] px-4 py-2 text-sm font-medium text-white hover:bg-[#0b6174]"
-          >
-            <Filter className="h-4 w-4" />
-            Filtrer par
-          </Button>
-          <button
-            type="button"
-            className="flex items-center gap-2 rounded-full border border-dashed border-muted-foreground/40 px-4 py-2 text-sm font-medium text-muted-foreground"
-          >
-            Date
-            <Menu className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className="hidden items-center gap-2 rounded-full border border-dashed border-[#f26a24] px-4 py-2 text-sm font-medium text-[#f26a24] transition hover:bg-[#f26a24]/10 md:flex"
-          >
-            Réinitialiser le filtre
-          </button>
-        </div>
-        <button
-          type="button"
-          className="flex items-center gap-2 rounded-full border border-dashed border-[#f26a24] px-4 py-2 text-sm font-medium text-[#f26a24] transition hover:bg-[#f26a24]/10 md:hidden"
-        >
-          Réinitialiser le filtre
-        </button>
-      </section>
-
-      <section className="mt-10 grid gap-6 lg:grid-cols-3">
-        <StatCard
-          title="Nombre de spot total"
-          metric="5342"
-          metaLabel="Récent"
-          gradient
-          recent={[
-            { channel: "Radio", value: "771" },
-            { channel: "RTI 1", value: "1937" },
-          ]}
-        />
-        <StatCard
-          title="Valorisation totale"
-          metric="1 352 413 039 F CFA"
-          metaLabel="Récent"
-          gradient
-          recent={[
-            { channel: "Radio", value: "1 299 221 415 F CFA" },
-            { channel: "RTI 1", value: "1 299 221 415 F CFA" },
-          ]}
-        />
-        <StatCard
-          title="Durée commerciale totale"
-          metric="08 : 12 : 44 : 28"
-          metaLabel="Récent"
-          gradient
-          recent={[
-            { channel: "Radio", value: "08 : 12 : 44 : 28", label: "Aujourd'hui" },
-            { channel: "RTI 1", value: "08 : 12 : 44 : 28", label: "23 juin, 13h06" },
-          ]}
-        />
-      </section>
-
-      <section className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Nombre de spots / j</p>
-              <p className="mt-2 text-4xl font-semibold text-foreground">682.5</p>
-              <p className="mt-1 text-xs uppercase tracking-wide text-[#0c6e85]">Spots</p>
+      {productCode === "metv" ? (
+        <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
+          <DialogContent size="lg" className="space-y-6">
+          <DialogHeader>
+            <DialogTitle>Paramétrer l'analyse</DialogTitle>
+            <DialogDescription>
+              Ajustez le secteur suivi et la {requiresBrandSelect ? "marque" : "chaîne"} analysée pour ce
+              tableau de bord.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="dda-sector" className="text-sm font-medium text-foreground">
+                Secteur analysé
+              </Label>
+              <Select
+                value={modalSectorValue || undefined}
+                onValueChange={(value) => {
+                  setModalSectorValue(value);
+                  setModalChannelValue("");
+                }}
+                disabled={sectorLoading}
+              >
+                <SelectTrigger
+                  id="dda-sector"
+                  className="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                >
+                  <SelectValue
+                    placeholder={
+                      sectorLoading ? "Chargement..." : "Sélectionnez un secteur"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {sectorLoading ? (
+                    <SelectItem value="__loading" disabled>
+                      Chargement...
+                    </SelectItem>
+                  ) : sectorOptions.length === 0 ? (
+                    <SelectItem value="__empty" disabled>
+                      Aucun secteur disponible
+                    </SelectItem>
+                  ) : (
+                    sectorOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {sectorError ? (
+                <p className="text-xs font-medium text-destructive">{sectorError}</p>
+              ) : null}
             </div>
-            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-600">
-              <TrendingUp className="mr-1 h-4 w-4" /> +2.45%
-            </span>
-          </div>
-          <div className="mt-6 flex items-end gap-2">
-            {[48, 62, 45, 68, 52, 72, 65].map((value, index) => (
-              <div key={index} className="flex-1">
-                <div className="flex h-32 w-full items-end justify-center rounded-full bg-[#0c6e85]/10">
-                  <div style={{ height: `${value}%` }} className="w-5 rounded-full bg-[#0c6e85]" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Heure de passage des spots</p>
-              <p className="mt-4 text-6xl font-semibold text-[#f26a24]">27</p>
-              <p className="text-lg font-semibold text-foreground">Septembre 2025</p>
+            <div className="space-y-2">
+              <Label htmlFor="dda-channel" className="text-sm font-medium text-foreground">
+                {channelSelectLabel}
+              </Label>
+              <Select
+                value={modalChannelValue || undefined}
+                onValueChange={(value) => setModalChannelValue(value)}
+                disabled={!modalSectorValue || channelLoading}
+              >
+                <SelectTrigger
+                  id="dda-channel"
+                  className="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                >
+                  <SelectValue
+                    placeholder={
+                      !modalSectorValue
+                        ? "Choisissez un secteur d'abord"
+                        : channelLoading
+                        ? "Chargement..."
+                        : channelPlaceholder
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {channelLoading ? (
+                    <SelectItem value="__loading" disabled>
+                      Chargement...
+                    </SelectItem>
+                  ) : channelOptions.length === 0 ? (
+                    <SelectItem value="__empty" disabled>
+                      {modalSectorValue
+                        ? "Aucune option disponible"
+                        : "Sélectionnez d'abord un secteur"}
+                    </SelectItem>
+                  ) : (
+                    channelOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {channelError ? (
+                <p className="text-xs font-medium text-destructive">{channelError}</p>
+              ) : null}
             </div>
-            <Button variant="ghost" className="rounded-full bg-[#fbe8dd] px-3 py-1 text-xs font-semibold text-[#f26a24]">
-              <Sparkles className="mr-1 h-4 w-4" /> Journée clé
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setFilterDialogOpen(false)}
+            >
+              Annuler
             </Button>
-          </div>
-          <div className="mt-8 flex flex-col gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center justify-between">
-              <span>05:00</span>
-              <span>10:00</span>
-              <span>17:00</span>
-              <span>20:00</span>
-            </div>
-            <div className="flex gap-2">
-              {[35, 55, 80, 60].map((width, index) => (
-                <div key={index} className="flex-1 rounded-full bg-[#0c6e85]/10">
-                  <div style={{ width: `${width}%` }} className="h-2 rounded-full bg-[#0c6e85]" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-        <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Heure de passage des spots</p>
-              <p className="mt-2 text-sm text-muted-foreground">Comparaison des valorisations</p>
-            </div>
-            <Button variant="ghost" className="rounded-full bg-[#fbe8dd] px-3 py-1 text-xs font-semibold text-[#f26a24]">
-              <Sparkles className="mr-1 h-4 w-4" /> Valorisation
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResetFilters}
+            >
+              Revenir au workspace
             </Button>
-          </div>
-          <div className="mt-6 h-48 w-full rounded-3xl bg-gradient-to-b from-white via-[#f5f8fb] to-[#eef3fb] p-4">
-            <svg viewBox="0 0 300 160" className="h-full w-full">
-              <path d="M10 120 C 70 60, 130 80, 190 40 S 270 80, 290 60" stroke="#f26a24" strokeWidth="4" fill="none" strokeLinecap="round" />
-              <path d="M10 40 C 70 90, 130 110, 190 120 S 260 100, 290 130" stroke="#0c6e85" strokeWidth="4" fill="none" strokeLinecap="round" />
-            </svg>
-            <div className="mt-2 flex justify-end gap-4 text-xs font-medium text-muted-foreground">
-              <span className="inline-flex items-center gap-1 text-[#f26a24]"><span className="h-2 w-2 rounded-full bg-[#f26a24]" /> Valorisation</span>
-              <span className="inline-flex items-center gap-1 text-[#0c6e85]"><span className="h-2 w-2 rounded-full bg-[#0c6e85]" /> Valorisation</span>
-            </div>
-          </div>
-        </Card>
-      </section>
-
-      <SectorAnalysisSection />
+            <Button
+              type="button"
+              onClick={handleApplyFilters}
+              disabled={
+                !modalSectorValue || !modalChannelValue || channelLoading
+              }
+              className="bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
+            >
+              Appliquer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      ) : null}
+      {productCode === "metv" ? (
+        <MetvDashboard
+          ddaData={ddaData}
+          channelIdentifier={channelIdentifier}
+          sectorIdentifier={sectorIdentifier}
+        />
+      ) : (
+        <ComingSoonDashboard productName={activeProduct?.name ?? null} />
+      )}
     </DashboardShell>
-  )
+  );
 }
 
-const sectorOptions = [
-  "Technologie",
-  "Télécom",
-  "Agro-industrie",
-  "Banque",
-]
-
-const leaderboardData = [
-  { name: "Groupe Carré d'Or", value: "54 0 232 215F CFA", delta: "+2.45%" },
-  { name: "MIB MIBEM", value: "54 0 232 215F CFA", delta: "+2.45%" },
-  { name: "Eurolait", value: "54 0 232 215F CFA", delta: "+2.45%" },
-  { name: "Solibra", value: "54 0 232 215F CFA", delta: "+2.45%" },
-  { name: "Brassivoir", value: "54 0 232 215F CFA", delta: "+2.45%" },
-  { name: "Groupe Kirène", value: "54 0 232 215F CFA", delta: "+2.45%" },
-]
-
-function SectorAnalysisSection() {
-  const [selectedSector, setSelectedSector] = useState<string>(sectorOptions[0])
-  const [activeTab, setActiveTab] = useState<"spots" | "valorisations">("spots")
-
+function ComingSoonDashboard({ productName }: { productName: string | null }) {
   return (
-    <section className="mt-10 space-y-6">
-      <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold text-foreground">Analyse sectorielle</h2>
-            <p className="text-sm text-muted-foreground">
-              Visualisez la performance journalière de vos secteurs clés.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">Secteur</span>
-            <Select value={selectedSector} onValueChange={setSelectedSector}>
-              <SelectTrigger className="w-56 rounded-full border border-border/70 bg-muted/30 text-sm font-medium text-foreground">
-                <SelectValue placeholder="Choisir un secteur" />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                {sectorOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+    <section className="mt-10 flex flex-1 items-center justify-center">
+      <div className="w-full max-w-3xl rounded-3xl border border-dashed border-muted-foreground/30 bg-muted/20 p-10 text-center shadow-sm">
+        <div className="space-y-3">
+          <h2 className="text-2xl font-semibold text-foreground">
+            Dashboard en préparation
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Le tableau de bord pour{" "}
+            <span className="font-medium text-foreground">
+              {productName ?? "ce produit"}
+            </span>{" "}
+            est en cours de conception. Revenez bientôt pour découvrir de
+            nouvelles analyses.
+          </p>
         </div>
-
-        <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_320px]">
-          <div className="rounded-3xl bg-gradient-to-r from-[#0d7f93]/10 via-white to-white p-6 shadow-sm">
-            <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-              <div className="space-y-3">
-                <h3 className="text-xl font-semibold text-foreground">
-                  Nombre de spots et valorisation par jour sur le secteur
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Entrez dans cet univers créatif. Le secteur {selectedSector.toLowerCase()} nous inspire à innover.
-                </p>
-                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#0c6e85]" /> Spots (bars)</span>
-                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#f26a24]" /> Valorisation</span>
-                </div>
-              </div>
-              <div className="flex flex-col justify-between">
-                <div className="flex h-40 items-end gap-3 rounded-2xl bg-white p-6 shadow-inner">
-                  {[32, 48, 72, 54, 66, 52, 43].map((value, index) => (
-                    <div key={index} className="flex-1">
-                      <div className="flex h-full w-full items-end justify-center rounded-lg bg-[#0c6e85]/10">
-                        <div className={`w-5 rounded-lg ${index === 2 ? "bg-[#f26a24]" : "bg-[#0c6e85]"}`} style={{ height: `${value}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                  {["04-12-2024", "04-12-2024", "04-12-2024", "04-12-2024", "04-12-2024"].map((date, index) => (
-                    <span key={`${date}-${index}`} className={index === 2 ? "font-semibold text-[#f26a24]" : ""}>
-                      {date}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex h-full flex-col justify-between gap-4 rounded-3xl bg-muted/30 p-6">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Valorisation (bars)</p>
-              <ul className="space-y-1 text-sm text-foreground">
-                {["2 400 000 F", "1 800 000 F", "1 200 000 F", "600 000 F", "0"].map((value) => (
-                  <li key={value} className="flex items-center justify-between gap-3">
-                    <span>{value}</span>
-                    <span className="text-muted-foreground">CFA</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-white p-4 text-sm text-muted-foreground shadow-sm">
-              <p>
-                Les performances sont calculées sur la semaine écoulée pour le secteur <span className="font-semibold text-foreground">{selectedSector.toLowerCase()}</span>.
-              </p>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Valorisation & nombre total de spots</p>
-                <h3 className="text-lg font-semibold text-foreground">Vue sectorielle</h3>
-              </div>
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#0c6e85]/10 px-3 py-1 text-xs font-semibold text-[#0c6e85]">
-                Taux spots secteur <span className="text-foreground">10%</span>
-              </span>
-            </div>
-            <div className="flex flex-col gap-6 sm:flex-row">
-              <div className="relative flex h-48 w-48 items-center justify-center self-center rounded-full bg-[conic-gradient(#f26a24_0deg_110deg,#0c6e85_110deg_240deg,#f4f6fb_240deg_360deg)]">
-                <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white text-center text-xs font-medium text-muted-foreground">
-                  <span className="text-base font-semibold text-foreground">11%</span>
-                  <span>Taux valorisation</span>
-                </div>
-              </div>
-              <div className="flex-1 space-y-4 text-sm text-muted-foreground">
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#0c6e85]"><span className="h-2 w-2 rounded-full bg-[#0c6e85]" /> Nb spots secteur</span>
-                    <span className="font-semibold text-foreground">7 215</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#f26a24]"><span className="h-2 w-2 rounded-full bg-[#f26a24]" /> Nb spots RTI</span>
-                    <span className="font-semibold text-foreground">2 150</span>
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#0c6e85]"><span className="h-2 w-2 rounded-full bg-[#0c6e85]" /> Valorisation secteur</span>
-                    <span className="font-semibold text-foreground">54 0 232 215F CFA</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#f26a24]"><span className="h-2 w-2 rounded-full bg-[#f26a24]" /> Valorisation RTI</span>
-                    <span className="font-semibold text-foreground">232 215F CFA</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="rounded-3xl border-none bg-white p-0 shadow-lg">
-          <div className="rounded-t-3xl bg-gradient-to-r from-[#f8f1ea] via-[#f2f5f9] to-[#f8f1ea] p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Classement des annonceurs</p>
-                <h3 className="text-lg font-semibold text-foreground">Sur le lecteur</h3>
-              </div>
-              <div className="flex items-center gap-2 rounded-full bg-white/60 p-1 text-xs font-semibold text-muted-foreground">
-                <button
-                  type="button"
-                  className={`rounded-full px-3 py-1 transition ${activeTab === "spots" ? "bg-white text-[#0c6e85] shadow" : "hover:bg-white/80"}`}
-                  onClick={() => setActiveTab("spots")}
-                >
-                  Spots
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-full px-3 py-1 transition ${activeTab === "valorisations" ? "bg-white text-[#0c6e85] shadow" : "hover:bg-white/80"}`}
-                  onClick={() => setActiveTab("valorisations")}
-                >
-                  Valorisations
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-3 p-6 text-sm">
-            {leaderboardData.map((item, index) => (
-              <div
-                key={item.name}
-                className="flex items-center justify-between rounded-2xl border border-border/70 bg-white/80 px-4 py-3 shadow-sm transition hover:border-[#0c6e85]/40"
-              >
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{index + 1}. {item.name}</p>
-                  <p className="text-base font-semibold text-foreground">{item.value}</p>
-                </div>
-                <span className="rounded-full bg-[#fbe8dd] px-3 py-1 text-xs font-semibold text-[#f26a24]">{item.delta}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
       </div>
     </section>
-  )
+  );
 }

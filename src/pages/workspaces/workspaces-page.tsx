@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Form, Formik } from "formik";
 import { Check, ChevronLeft, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { TextField } from "@/components/forms/text-field";
 import { SelectField } from "@/components/forms/select-field";
+
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import {
   createWorkspace,
   fetchProducts,
   fetchWorkspaces,
+  fetchSectors,
+  fetchChainsBySector,
+  fetchBrandsBySector,
   type ProductResponse,
   type WorkspaceResponse,
 } from "@/lib/api";
@@ -27,13 +31,15 @@ const heroContent = {
   title: "L’impact en données des médias révélés par les stats",
   description:
     "Un projet pour révéler l’impact réel de nos radios et télévisions à travers des données claires et accessibles.",
-  testimonial: null,
   // testimonial: {
-  //   quote:
-  //     "En tant qu’analyste, disposer de données médias fiables change tout. VDM me permet de prendre des décisions rapides et éclairées.",
-  //   name: "Daphne Park",
-  //   role: "UI/UX Designer",
+  //   quote: "",
   // },
+  testimonial: {
+    quote:
+      "En tant qu’analyste, disposer de données médias fiables change tout. VDM me permet de prendre des décisions rapides et éclairées.",
+    name: "Daphne Park",
+    role: "UI/UX Designer",
+  },
 };
 
 const accentPalette = [
@@ -46,21 +52,8 @@ const accentPalette = [
 const organisationOptions = [
   { value: "tv", label: "Chaîne TV" },
   { value: "radio", label: "Radio" },
-  { value: "digital", label: "Plateforme digitale" },
-];
-
-const sectorOptions = [
-  { value: "agroindustrie", label: "Agroindustrie" },
-  { value: "telecom", label: "Télécom" },
-  { value: "banque", label: "Banque & Assurance" },
-  { value: "mode", label: "Mode & Beauté" },
-];
-
-const channelOptions = [
-  { value: "rti1", label: "RTI 1" },
-  { value: "radio_ci", label: "Radio CI" },
-  { value: "canal+", label: "Canal+" },
-  { value: "trace", label: "Trace FM" },
+  { value: "annonceur", label: "Annonceur" },
+  { value: "investor", label: "Investisseur direct" },
 ];
 
 const pricingOptions = [
@@ -171,11 +164,23 @@ export function WorkspacesPage() {
   const [products, setProducts] = useState<ProductResponse[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [sectors, setSectors] = useState<Array<{ value: string; label: string }>>([]);
+  const [sectorsLoading, setSectorsLoading] = useState(false);
+  const [sectorsError, setSectorsError] = useState<string | null>(null);
+  const [chains, setChains] = useState<Array<{ value: string; label: string }>>([]);
+  const [chainsLoading, setChainsLoading] = useState(false);
+  const [chainsError, setChainsError] = useState<string | null>(null);
+  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
+  const [brandsError, setBrandsError] = useState<string | null>(null);
+  const [selectedProductCode, setSelectedProductCode] = useState<string | null>(null);
+  const [selectedSector, setSelectedSector] = useState<string>('');
   const [workspaces, setWorkspaces] = useState<WorkspaceResponse[]>([]);
   const [workspacesLoading, setWorkspacesLoading] = useState<boolean>(true);
   const [workspacesError, setWorkspacesError] = useState<string | null>(null);
 
   const accessToken = useMemo(() => tokens?.access ?? "", [tokens?.access]);
+  const availableProducts = products;
 
   useEffect(() => {
     let mounted = true;
@@ -200,9 +205,94 @@ export function WorkspacesPage() {
   }, []);
 
   useEffect(() => {
+    if (!tokens?.access) {
+      setSectors([])
+      return
+    }
+
+    let active = true
+    setSectorsLoading(true)
+    setSectorsError(null)
+    fetchSectors(tokens.access)
+      .then((response) => {
+        if (!active) return
+        const options = (response.sectors ?? []).map((sector) => ({
+          value: sector,
+          label: sector.charAt(0).toUpperCase() + sector.slice(1).toLowerCase(),
+        }))
+        setSectors(options)
+      })
+      .catch((error) => {
+        if (!active) return
+        setSectorsError(error instanceof Error ? error.message : "Impossible de charger les secteurs")
+      })
+      .finally(() => {
+        if (!active) return
+        setSectorsLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [tokens?.access])
+
+  const loadChainsForSector = useCallback(
+    async (sector: string) => {
+      if (!tokens?.access || !sector) {
+        setChains([])
+        return
+      }
+
+      setChainsLoading(true)
+      setChainsError(null)
+      try {
+        const response = await fetchChainsBySector(sector, tokens.access)
+        const options = (response.chaines ?? []).map((chain) => ({
+          value: chain,
+          label: chain,
+        }))
+        setChains(options)
+      } catch (error) {
+        setChainsError(error instanceof Error ? error.message : "Impossible de charger les chaînes")
+        setChains([])
+      } finally {
+        setChainsLoading(false)
+      }
+    },
+    [tokens?.access]
+  )
+
+  const loadBrandsForSector = useCallback(
+    async (sector: string) => {
+      if (!tokens?.access || !sector) {
+        setBrands([])
+        return
+      }
+
+      setBrandsLoading(true)
+      setBrandsError(null)
+      try {
+        const response = await fetchBrandsBySector(sector, tokens.access)
+        const options = (response.marques ?? []).map((brand) => ({
+          value: brand,
+          label: brand,
+        }))
+        setBrands(options)
+      } catch (error) {
+        setBrandsError(error instanceof Error ? error.message : "Impossible de charger les marques")
+        setBrands([])
+      } finally {
+        setBrandsLoading(false)
+      }
+    },
+    [tokens?.access]
+  )
+
+  useEffect(() => {
     let mounted = true;
 
     if (!accessToken) {
+
       setWorkspaces([]);
       setWorkspacesLoading(false);
       return () => {
@@ -231,20 +321,37 @@ export function WorkspacesPage() {
     };
   }, [accessToken]);
 
-  const availableProducts = products.length > 0 ? products : [];
+
+  const sectorSelectOptions = sectors;
+  const chainSelectOptions = chains;
+  const brandSelectOptions = brands;
+  const requiresBrandSelect = (selectedProductCode ?? '').toLowerCase() === 'mep'
+  const channelSelectOptions = requiresBrandSelect ? brandSelectOptions : chainSelectOptions
+  const channelLoading = requiresBrandSelect ? brandsLoading : chainsLoading
+  const channelError = requiresBrandSelect ? brandsError : chainsError
+  const channelPlaceholder = requiresBrandSelect ? "Choisissez une marque" : "Choisissez une chaîne"
+  const channelLabel = requiresBrandSelect ? "Produit / Marque" : "Chaîne"
+
+  useEffect(() => {
+    if (!selectedSector) {
+      setChains([])
+      setBrands([])
+      return
+    }
+
+    if (requiresBrandSelect) {
+      loadBrandsForSector(selectedSector)
+      setChains([])
+    } else {
+      loadChainsForSector(selectedSector)
+      setBrands([])
+    }
+  }, [selectedSector, requiresBrandSelect, loadBrandsForSector, loadChainsForSector])
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="hidden w-full max-w-md flex-col justify-between bg-[#0b7484] p-12 text-white md:flex">
-        {/* <div className="flex items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-xl font-semibold">
-            VDM
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-2xl font-bold">VDM</span>
-            <span className="text-xs uppercase tracking-[0.2em] text-white/70">Valorisation des médias</span>
-          </div>
-        </div> */}
+      <aside className="sticky top-0 hidden h-screen w-full max-w-md flex-col justify-between bg-[#0b7484] p-12 text-white md:flex">
+ 
         <div>
           <img src={Logo} className="h-[173px] w-[246px]" />
         </div>
@@ -254,30 +361,10 @@ export function WorkspacesPage() {
           </h1>
           <p className="text-sm text-white/80">{heroContent.description}</p>
         </div>
-        <div className="rounded-3xl bg-white/10 p-6 backdrop-blur">
-          <p className="text-sm leading-relaxed text-white/80">
-            “{heroContent.testimonial.quote}”
-          </p>
-          <div className="mt-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-white/30" />
-            <div>
-              <p className="text-sm font-semibold text-white">
-                {heroContent.testimonial.name}
-              </p>
-              <p className="text-xs text-white/70">
-                {heroContent.testimonial.role}
-              </p>
-            </div>
-          </div>
-          <div className="mt-6 flex justify-center gap-1">
-            <span className="h-1.5 w-4 rounded-full bg-white" />
-            <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
-            <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
-          </div>
-        </div>
+        
       </aside>
 
-      <main className="flex-1 overflow-y-auto px-6 py-10 md:px-12">
+      <main className="flex-1 max-h-screen overflow-y-auto px-6 py-10 md:px-12">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold text-foreground">
@@ -367,10 +454,7 @@ export function WorkspacesPage() {
                     organisationOptions.find((option) => option.value === workspace.type_client)?.label ??
                     workspace.type_client ??
                     "Organisation";
-                  const channelLabel =
-                    channelOptions.find((option) => option.value === workspace.id_client)?.label ??
-                    workspace.id_client ??
-                    "";
+                  const channelLabel = workspace.id_client ?? "";
                   const planMeta = pricingOptions.find((option) => option.id === workspace.paystack_subscription_plan);
                   return (
                     <button
@@ -468,6 +552,10 @@ export function WorkspacesPage() {
                   setWorkspaces((prev) => [workspace, ...prev]);
                   helpers.resetForm();
                   setStepIndex(0);
+                  setChains([]);
+                  setBrands([]);
+                  setSelectedProductCode(null);
+                  setSelectedSector('');
                   persistSelectedWorkspace(workspace)
                   navigate(buildPath.dashboard(workspace.id), {
                     replace: true,
@@ -506,12 +594,12 @@ export function WorkspacesPage() {
                         </div>
                       ) : (
                         <div className="flex flex-col gap-4">
-                          {availableProducts.length === 0 ? (
+                          {products.length === 0 ? (
                             <div className="rounded-2xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
                               Aucun produit disponible pour le moment.
                             </div>
                           ) : null}
-                          {availableProducts.map((product, index) => {
+                          {products.map((product, index) => {
                             const isSelected =
                               values.product === String(product.id);
                             const accent =
@@ -525,9 +613,13 @@ export function WorkspacesPage() {
                               <button
                                 key={product.id}
                                 type="button"
-                                onClick={() =>
+                                onClick={() => {
+                                  setSelectedProductCode(product.code ?? null)
+                                  setChains([])
+                                  setBrands([])
                                   setFieldValue("product", String(product.id))
-                                }
+                                  setFieldValue("channel", '', false)
+                                }}
                                 className={`w-full rounded-2xl border p-5 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-[#60b5c2]/60 ${
                                   isSelected
                                     ? "border-[#026c7a] bg-[#026c7a]/10"
@@ -603,15 +695,44 @@ export function WorkspacesPage() {
                           name="sector"
                           label="Secteur d’activité"
                           placeholder="Sélectionnez un secteur"
-                          options={sectorOptions}
+                          options={sectorSelectOptions}
+                          disabled={sectorsLoading}
+                          onValueChange={(value) => {
+                            setSelectedSector(value)
+                            setFieldValue('channel', '', false)
+                            if (!value) {
+                              setChains([])
+                              setBrands([])
+                              return
+                            }
+
+                            if (requiresBrandSelect) {
+                              loadBrandsForSector(value)
+                              setChains([])
+                            } else {
+                              loadChainsForSector(value)
+                              setBrands([])
+                            }
+                          }}
                         />
                       </div>
+                      {sectorsLoading ? (
+                        <p className="text-xs text-muted-foreground">Chargement des secteurs…</p>
+                      ) : sectorsError ? (
+                        <p className="text-xs font-medium text-destructive">{sectorsError}</p>
+                      ) : null}
                       <SelectField
                         name="channel"
-                        label="Chaîne"
-                        placeholder="Choisissez une chaîne"
-                        options={channelOptions}
+                        label={channelLabel}
+                        placeholder={channelPlaceholder}
+                        options={channelSelectOptions}
+                        disabled={channelLoading || !values.sector}
                       />
+                      {channelLoading ? (
+                        <p className="text-xs text-muted-foreground">Chargement en cours…</p>
+                      ) : channelError ? (
+                        <p className="text-xs font-medium text-destructive">{channelError}</p>
+                      ) : null}
                       <TextField
                         name="name"
                         label="Nom de l’espace"

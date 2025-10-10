@@ -4,7 +4,9 @@ import { useId } from "react";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -23,6 +25,8 @@ interface SelectFieldProps {
   options: Option[];
   containerClassName?: string;
   className?: string;
+  onValueChange?: (value: string) => void;
+  disabled?: boolean;
 }
 
 export function SelectField({
@@ -32,10 +36,27 @@ export function SelectField({
   options,
   containerClassName,
   className,
+  onValueChange,
+  disabled,
 }: SelectFieldProps) {
   const [field, meta, helpers] = useField(name);
   const id = useId();
   const showError = meta.touched && meta.error;
+
+  // Function to split array into chunks of 5
+  const splitArrayIntoChunks = (array: Option[], chunkSize: number) => {
+    return array.reduce((result, item, index) => {
+      const chunkIndex = Math.floor(index / chunkSize);
+      if (!result[chunkIndex]) {
+        result[chunkIndex] = [];
+      }
+      result[chunkIndex].push(item);
+      return result;
+    }, []);
+  };
+
+  const chunks = options.length > 5 ? splitArrayIntoChunks(options, 5) : [options];
+  console.log("let's see chunks", chunks);
 
   return (
     <div className={cn("space-y-2.5", containerClassName)}>
@@ -44,9 +65,11 @@ export function SelectField({
       </Label>
       <Select
         value={field.value}
+        disabled={disabled}
         onValueChange={(value) => {
           helpers.setValue(value);
           helpers.setTouched(true, false);
+          onValueChange?.(value);
         }}
       >
         <SelectTrigger
@@ -57,14 +80,20 @@ export function SelectField({
             "mt-2"
           )}
         >
-          <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
+          {chunks.map((chunk, index) => (
+            <SelectGroup key={index}>
+              <SelectLabel>{index + 1}</SelectLabel>
+              {chunk.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           ))}
+          
         </SelectContent>
       </Select>
       {showError ? (

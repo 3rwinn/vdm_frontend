@@ -1,14 +1,43 @@
-import { FormEvent, useEffect, useState } from "react"
-import { Settings, User, Building2 } from "lucide-react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
+import { Settings, User, Building2, Trash2 } from "lucide-react"
+import { useNavigate } from "react-router-dom"
 
 import { DashboardShell } from "@/components/layouts/dashboard-shell"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/hooks/use-auth"
-import { getStoredWorkspace } from "@/lib/workspaces"
+import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown"
+import {
+  clearSelectedWorkspace,
+  getStoredWorkspace,
+  persistSelectedWorkspace,
+} from "@/lib/workspaces"
+import { cn } from "@/lib/utils"
+import { paths } from "@/routes/paths"
 import { toast } from "sonner"
+import { deleteWorkspace } from "@/lib/api"
 
 interface ProfileFormState {
   firstName: string
@@ -17,19 +46,24 @@ interface ProfileFormState {
 }
 
 export function SettingsPage() {
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { user, tokens } = useAuth()
+  const { selectedWorkspace, selectWorkspace, workspaces, loading } = useWorkspaceDropdown({
+    accessToken: tokens?.access,
+  })
   const [formState, setFormState] = useState<ProfileFormState>({
     firstName: user?.first_name ?? "",
     lastName: user?.last_name ?? "",
     email: user?.email ?? "",
   })
-  const [workspaceName, setWorkspaceName] = useState<string>("")
   const [workspaceDetails, setWorkspaceDetails] = useState({
     type: "—",
     channel: "—",
     plan: "—",
     products: "—",
   })
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     setFormState({
@@ -41,19 +75,30 @@ export function SettingsPage() {
 
   useEffect(() => {
     const stored = getStoredWorkspace()
-    if (stored.workspaceId) {
-      setWorkspaceName(stored.workspace?.name ?? `Workspace #${stored.workspaceId}`)
-      if (stored.workspace) {
-        setWorkspaceDetails({
-          type: stored.workspace.type_client ?? "—",
-          channel: stored.workspace.id_client ?? "—",
-          plan: stored.workspace.paystack_subscription_plan ?? "Plan à définir",
-          products:
-            stored.workspace.products_details?.map((product) => product.name).join(", ") ?? "—",
-        })
-      }
+    if (!stored.workspaceId) {
+      navigate(paths.workspaces, { replace: true })
+      return
     }
-  }, [])
+
+    if (!selectedWorkspace && stored.workspace) {
+      persistSelectedWorkspace(stored.workspace)
+      selectWorkspace(stored.workspace)
+    }
+  }, [selectedWorkspace, selectWorkspace, navigate])
+
+  const workspaceName = useMemo(() => selectedWorkspace?.name ?? "Aucun workspace sélectionné", [selectedWorkspace])
+
+  useEffect(() => {
+    if (selectedWorkspace) {
+      setWorkspaceDetails({
+        type: selectedWorkspace.type_client ?? "—",
+        channel: selectedWorkspace.id_client ?? "—",
+        plan: selectedWorkspace.paystack_subscription_plan ?? "Plan à définir",
+        products:
+          selectedWorkspace.products_details?.map((product) => product.name).join(", ") ?? "—",
+      })
+    }
+  }, [selectedWorkspace])
 
   const handleChange = (field: keyof ProfileFormState) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setFormState((previous) => ({ ...previous, [field]: event.target.value }))
@@ -66,16 +111,66 @@ export function SettingsPage() {
 
   return (
     <DashboardShell>
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-[#0c6e85]">Paramètre du compte</p>
-        <h1 className="flex items-center gap-2 text-3xl font-semibold text-foreground">
-          <Settings className="h-6 w-6 text-[#0c6e85]" />
-          Profil utilisateur
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Gérez vos informations personnelles et l’espace de travail associé :
-          <span className="ml-1 font-semibold text-foreground">{workspaceName || "Aucun workspace sélectionné"}</span>
-        </p>
+      <header className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-[#0c6e85]">Paramètre du compte</p>
+          <h1 className="flex items-center gap-2 text-3xl font-semibold text-foreground">
+            <Settings className="h-6 w-6 text-[#0c6e85]" />
+            Profil utilisateur
+          </h1>
+        </div>
+        <div className="flex w-full items-center justify-end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-white px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:border-[#0c6e85]/40"
+              >
+                <span className="text-muted-foreground">Espace courant :</span>
+                <span className="max-w-[220px] truncate font-semibold text-foreground">{workspaceName}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-72">
+              <DropdownMenuLabel>Vos espaces</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {loading ? (
+                <DropdownMenuItem disabled>Chargement…</DropdownMenuItem>
+              ) : workspaces.length === 0 ? (
+                <DropdownMenuItem disabled>Aucun workspace disponible</DropdownMenuItem>
+              ) : (
+                workspaces.map((workspace) => {
+                  const isActive = selectedWorkspace?.id === workspace.id
+                  return (
+                    <DropdownMenuItem
+                      key={workspace.id}
+                      onSelect={(event) => {
+                        event.preventDefault()
+                      }}
+                      className={cn(
+                        "flex flex-col items-start gap-0.5",
+                        isActive && "bg-[#0c6e85]/10 text-[#0c6e85] focus:bg-[#0c6e85]/10"
+                      )}
+                    >
+                      <span className="text-sm font-semibold">{workspace.name}</span>
+                      <span className="text-xs text-muted-foreground">{workspace.type_client ?? "Type d’organisation indéterminé"}</span>
+                    </DropdownMenuItem>
+                  )
+                })
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault()
+                  navigate(paths.workspaces)
+                }}
+              >
+                Gérer mes workspaces
+                <DropdownMenuShortcut>↗</DropdownMenuShortcut>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       <section className="mt-10 grid gap-6 lg:grid-cols-2">
@@ -163,6 +258,56 @@ export function SettingsPage() {
               <p className="text-base text-foreground">{workspaceDetails.products}</p>
             </div>
           </div>
+          {selectedWorkspace ? (
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="mt-6 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer ce workspace
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Supprimer « {workspaceName} » ?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Cette action est définitive. Toutes les données associées à cet espace seront supprimées.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Annuler</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deleting}
+                    className="bg-[#e0552d] hover:bg-[#c94924]"
+                    onClick={async (event) => {
+                      event.preventDefault()
+                      if (!selectedWorkspace || !tokens?.access) {
+                        toast.error("Impossible de supprimer l’espace : session expirée")
+                        return
+                      }
+                      try {
+                        setDeleting(true)
+                        await deleteWorkspace(selectedWorkspace.id, tokens.access)
+                        toast.success("Workspace supprimé")
+                        clearSelectedWorkspace()
+                        selectWorkspace(undefined)
+                        navigate(paths.workspaces, { replace: true })
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Suppression impossible")
+                      } finally {
+                        setDeleting(false)
+                        setDeleteDialogOpen(false)
+                      }
+                    }}
+                  >
+                    {deleting ? "Suppression…" : "Supprimer"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
         </Card>
       </section>
 
