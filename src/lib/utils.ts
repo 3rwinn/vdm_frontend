@@ -5,6 +5,24 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const frenchCurrencyFormatter = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "XOF",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+export function formatCurrency(amount: number) {
+  if (!Number.isFinite(amount)) {
+    return "";
+  }
+
+  // `Intl.NumberFormat` returns non-breaking spaces. Replace them for regular spaces.
+  return frenchCurrencyFormatter
+    .format(amount)
+    .replace(/\u00a0/g, " ");
+}
+
 // Function to replace "/" in string by ":" in all occurence in the string
 // Example: "08/12/2025" -> "08:12:2025"
 export function replaceSlashByColon(str: string) {
@@ -63,44 +81,7 @@ export function calculateDifference(str1: string, str2: string) {
   }
 }
 
-/* 
-Function to convert this data structure:
-"time_slot_metrics": {
-        "spot_key": [
-            "00H-05H",
-            "05H-10H",
-            "10H-13H",
-            "13H-17H",
-            "17H-20H",
-            "20H-24H"
-        ],
-        "spot_count": [
-            19,
-            80,
-            191,
-            118,
-            218,
-            137
-        ],
-        "valorization": [
-            0,
-            0,
-            0,
-            0,
-            0,
-            0
-        ]
-    },
 
-    into this data structure:
-    [
-      { heure: "00H-05H", spots: 186 },
-      { heure: "10H-13H", spots: 237 },
-      { heure: "13H-17H", spots: 73 },
-      { heure: "17H-20H", spots: 209 },
-      { heure: "20H-24H", spots: 214 },
-    ]
-*/
 export function convertTimeSlotMetricsToChartData(timeSlotMetrics: any) {
   const heures = Array.isArray(timeSlotMetrics?.spot_key)
     ? timeSlotMetrics.spot_key
@@ -109,6 +90,10 @@ export function convertTimeSlotMetricsToChartData(timeSlotMetrics: any) {
     ? timeSlotMetrics.spot_count
     : [];
 
+  const valorisations = Array.isArray(timeSlotMetrics?.valorization)
+   ? timeSlotMetrics.valorization
+   : [];
+
   if (heures.length === 0 || spots.length === 0) {
     return [];
   }
@@ -116,6 +101,7 @@ export function convertTimeSlotMetricsToChartData(timeSlotMetrics: any) {
   const newdatas = heures.map((heure: any, index: number) => ({
     heure: heure,
     spots: spots[index] ?? 0,
+    valorisations: valorisations[index]
   }));
 
   console.log("new alpha", newdatas);
@@ -180,7 +166,7 @@ export function convertSectorDailyMetricsToChartData(dailyMetrics: any) {
   const newdatas = jours.map((jour: any, index: number) => ({
     jour: jour,
     spots: spots[index] ?? 0,
-    valorisation: valorisation[index] ?? 0,
+    valorisation: Math.round(valorisation[index] / 100000),
   }));
 
   return newdatas;

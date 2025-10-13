@@ -6,6 +6,8 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
 } from "@/components/ui/chart";
 import {
   Select,
@@ -43,6 +45,7 @@ import {
   convertDailyMetricsToChartData,
   convertSectorDailyMetricsToChartData,
   convertTimeSlotMetricsToChartData,
+  formatCurrency,
   replaceColonBySlashandConvert,
   replaceSlashByLabel,
 } from "@/lib/utils";
@@ -69,6 +72,8 @@ export function MetvDashboard({
     }
     return [];
   }, [ddaData?.data?.metrics?.time_slot_metrics]);
+
+  console.log("@TIMESLOTDATAS", timeSlotData);
 
   const dailyMetricData = useMemo(() => {
     const converted = convertDailyMetricsToChartData(
@@ -109,7 +114,9 @@ export function MetvDashboard({
         />
         <StatCard
           title="Valorisation totale"
-          metric={`${ddaData?.data?.nvd?.sector?.total_valorisation || 0} FCFA`}
+          metric={`${
+            formatCurrency(ddaData?.data?.nvd?.sector?.total_valorisation) || 0
+          }`}
           metaLabel="Récent"
           gradient
           recent={[
@@ -117,15 +124,18 @@ export function MetvDashboard({
               label: "Valorisation totale",
               channel: channelIdentifier,
               value:
-                ddaData?.data?.nvd?.sector_and_channel?.total_valorisation || 0,
+                formatCurrency(
+                  ddaData?.data?.nvd?.sector_and_channel?.total_valorisation
+                ) || 0,
             },
             {
               label: "Valorisation totale",
               channel: "CONCURRENCE",
               value:
-                ddaData?.data?.nvd?.sector?.total_valorisation -
-                  ddaData?.data?.nvd?.sector_and_channel?.total_valorisation ||
-                0,
+                formatCurrency(
+                  ddaData?.data?.nvd?.sector?.total_valorisation -
+                    ddaData?.data?.nvd?.sector_and_channel?.total_valorisation
+                ) || 0,
             },
           ]}
         />
@@ -163,7 +173,7 @@ export function MetvDashboard({
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                Nombre de spots / j
+                Nombre de spots par jour
               </p>
             </div>
           </div>
@@ -197,7 +207,8 @@ export function MetvDashboard({
 
                   <ChartTooltip
                     cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
-                    labelFormatter={(value) => `Plage horaire : ${value}`}
+                    labelFormatter={(value) => moment(value).format("DD/MM/YYY")}
+                    content={<ChartTooltipContent />}
                   />
                   <Area dataKey="spots" fill="#0c6e85" type="linear" />
                 </AreaChart>
@@ -211,8 +222,9 @@ export function MetvDashboard({
         <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
           <div className="flex items-start justify-between">
             <div>
+              {/* <p className="text-xs uppercase tracking-wide text-muted-foreground/70"> */}
               <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                Heure de passage des spots
+                Spots par heure de passage
               </p>
             </div>
           </div>
@@ -249,6 +261,7 @@ export function MetvDashboard({
                   <ChartTooltip
                     cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
                     labelFormatter={(value) => `Plage horaire : ${value}`}
+                    content={<ChartTooltipContent />}
                   />
                   <Area dataKey="spots" fill="#0c6e85" type="step" />
                 </AreaChart>
@@ -260,19 +273,17 @@ export function MetvDashboard({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                Heure de passage des spots
+                Valorisation par heure de passage des spots
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Comparaison des valorisations
-              </p>
+             
             </div>
           </div>
           <div className="mt-6 ">
             <ChartContainer
               config={{
-                spots: {
-                  label: "Nombre de spots",
-                  color: "#0c6e85",
+                valorisations: {
+                  label: "Valorisations en millions de FCFA",
+                  color: "#f26a24",
                 },
               }}
               className="h-68 w-full"
@@ -281,11 +292,7 @@ export function MetvDashboard({
                 {/* Remplacer timeSlot par les vrais données de valorisation */}
                 <BarChart data={timeSlotData} layout="vertical">
                   <CartesianGrid vertical={false} />
-                  <XAxis
-                    type="number"
-                    dataKey={"spots"}
-                    // hide
-                  />
+                  <XAxis type="number" dataKey={"valorisations"} />
                   <YAxis
                     type="category"
                     dataKey="heure"
@@ -296,8 +303,9 @@ export function MetvDashboard({
                   <ChartTooltip
                     cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
                     labelFormatter={(value) => `Plage horaire : ${value}`}
+                    content={<ChartTooltipContent />}
                   />
-                  <Bar dataKey="spots" fill="#0c6e85" />
+                  <Bar dataKey="valorisations" fill="#f26a24" />
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -450,14 +458,14 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
     datas?.sector_metrics
   );
 
-  console.log("sectorDaily", sectorDailyMetrics);
-
   const spotOnSectors = datas?.nvd?.sector?.nombre_spots_total;
   const spotOnSectorChannel =
     datas?.nvd?.sector_and_channel?.nombre_spots_total;
 
   const percentageSpotOnSectorChannel =
     Math.round((spotOnSectorChannel * 100) / spotOnSectors) || 0;
+
+  const percentageOtherChannelOnSector = 100 - percentageSpotOnSectorChannel;
 
   const valorisationOnSectors = datas?.nvd?.sector?.total_valorisation;
   const valorisationOnSectorChannel =
@@ -471,82 +479,66 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
       <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold text-foreground">
-              Analyse sectorielle
-            </h2>
+            
             <p className="text-sm text-muted-foreground">
-              Visualisez la performance journalière de vos secteurs clés.
+              Nombre de spots par jour sur le secteur
             </p>
+            <h3 className="text-2xl font-semibold text-foreground">
+              {sector}
+            </h3>
           </div>
-          {/* <div className="flex items-center gap-3">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">
-              Secteur
-            </span>
-            <Select value={selectedSector} onValueChange={setSelectedSector}>
-              <SelectTrigger className="w-56 rounded-full border border-border/70 bg-muted/30 text-sm font-medium text-foreground">
-                <SelectValue placeholder="Choisir un secteur" />
-              </SelectTrigger>
-              <SelectContent className="rounded-2xl">
-                {sectorOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div> */}
+          
         </div>
 
         <div className="mt-8 grid gap-6">
-          {/* <div className="rounded-3xl bg-gradient-to-r from-[#0d7f93]/10 via-white to-white p-6 shadow-sm"> */}
           <div className="rounded-3xl">
-            <div>
-              <div>
-                <ChartContainer
-                  config={{
-                    spots: { label: "Spots", color: "#0c6e85" },
-                    valorisation: { label: "Valorisation", color: "#f26a24" },
-                  }}
-                  className="h-68 rounded-2xl bg-white p-4"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={sectorDailyMetrics}>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
-                        stroke="#dbe4f3"
-                      />
-                      <XAxis
-                        dataKey="jour"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 10 }}
-                        tickFormatter={(value) =>
-                          moment(value).format("DD/MM/YY")
-                        }
-                      />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 10 }}
-                      />
-                      <ChartTooltip
-                        cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
-                      />
-                      <Bar
-                        dataKey="spots"
-                        radius={[6, 6, 0, 0]}
-                        fill="#0c6e85"
-                      />
-                      <Bar
-                        dataKey="valorisation"
-                        radius={[6, 6, 0, 0]}
-                        fill="#f26a24"
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </div>
+            <div className="">
+              <ChartContainer
+                config={{
+                  spots: { label: "Spots", color: "#0c6e85" },
+                  valorisation: {
+                    label: "Valorisation (en millions de FCFA) ",
+                    color: "#f26a24",
+                  },
+                }}
+                className="h-[400px] w-full bg-white"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={sectorDailyMetrics}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="#dbe4f3"
+                    />
+                    <XAxis
+                      dataKey="jour"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(value) =>
+                        moment(value).format("DD/MM/YY")
+                      }
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 10 }}
+                    />
+                    <ChartTooltip
+                      cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
+                      content={<ChartTooltipContent />}
+                      labelFormatter={(value) => moment(value).format("DD/MM/YYYY")}
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    <Bar dataKey="spots" radius={[6, 6, 0, 0]} fill="#0c6e85" />
+                    <Bar
+                      dataKey="valorisation"
+                      radius={[6, 6, 0, 0]}
+                      fill="#f26a24"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </div>
           </div>
         </div>
@@ -558,10 +550,11 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
-                  Taux d'occupation
+                  Taux d'occupation sur le secteur
                 </p>
                 <h3 className="text-lg font-semibold text-foreground">
-                  Vue sectorielle
+                 {sector}
+                  
                 </h3>
               </div>
               {/* <span className="inline-flex items-center gap-2 rounded-full bg-[#0c6e85]/10 px-3 py-1 text-xs font-semibold text-[#0c6e85]">
@@ -579,18 +572,18 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
                 >
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <ChartTooltip />
+                      <ChartTooltip content={<ChartTooltipContent />} />
                       <Pie
                         data={[
                           {
                             name: "Nombre spots secteur",
-                            value: spotOnSectors,
-                            fill: "#0c6e85",
+                            value: percentageSpotOnSectorChannel,
+                            fill: "#f26a24",
                           },
                           {
                             name: "Nombre spots",
-                            value: spotOnSectorChannel,
-                            fill: "#f26a24",
+                            value: percentageOtherChannelOnSector,
+                            fill: "#0c6e85",
                           },
                         ]}
                         dataKey="value"
@@ -601,64 +594,40 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
                 </ChartContainer>
               </div>
               <div className="space-y-4 text-sm text-muted-foreground">
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#0c6e85]">
-                      <span className="h-2 w-2 rounded-full bg-[#0c6e85]" />{" "}
-                      Nombre de spots sur le secteur {sector}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {spotOnSectors}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#f26a24]">
-                      <span className="h-2 w-2 rounded-full bg-[#f26a24]" />{" "}
-                      Nombre de spots de {chaine} sur le secteur {sector}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {spotOnSectorChannel}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-black font-bold">
-                      <span className="h-2 w-2 rounded-full bg-black" /> Taux
-                      d'occupation par spot de {chaine}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {percentageSpotOnSectorChannel} %
-                    </span>
-                  </div>
+                <div>
+                  <span className="text-black">
+                    <b>{chaine}</b> occupe{" "}
+                    <b className="text-[#f26a24]">{spotOnSectorChannel}</b>{" "}
+                    spots sur les{" "}
+                    <b className="text-[#0c6e85]">{spotOnSectors}</b> présents
+                    dans le secteur <b>{sector}</b>, soit un taux d'occupation
+                    de{" "}
+                    <b className="text-[#f26a24]">
+                      {percentageSpotOnSectorChannel}%
+                    </b>{" "}
+                    .
+                  </span>
                 </div>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#0c6e85]">
-                      <span className="h-2 w-2 rounded-full bg-[#0c6e85]" />{" "}
-                      Valorisation du secteur {sector}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {valorisationOnSectors} F CFA
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-[#f26a24]">
-                      <span className="h-2 w-2 rounded-full bg-[#f26a24]" />{" "}
-                      Valorisation de {chaine} sur le secteur {sector}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {valorisationOnSectorChannel} F CFA
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-2 text-black font-bold">
-                      <span className="h-2 w-2 rounded-full bg-black" /> Taux
-                      d'occupation par valorisation de {chaine}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {percentageValorisationOnSectorChannel} %
-                    </span>
-                  </div>
+
+                <div>
+                  <span className="text-black">
+                    En termes de valorisation, <b>{chaine}</b> représente{" "}
+                    <b className="text-[#f26a24]">
+                      {formatCurrency(valorisationOnSectorChannel)}
+                    </b>{" "}
+                    sur un total de{" "}
+                    <b className="text-[#0c6e85]">
+                      {formatCurrency(valorisationOnSectors)}
+                    </b>
+                    , soit{" "}
+                    <b className="text-[#f26a24]">
+                      {Math.round(percentageValorisationOnSectorChannel)}%
+                    </b>{" "}
+                    de la valeur du secteur.
+                  </span>
                 </div>
+
+              
               </div>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { format, isValid, parse } from "date-fns";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { DashboardShell } from "@/components/layouts/dashboard-shell";
@@ -37,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -45,8 +47,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Settings2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarIcon, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+
+const INPUT_DISPLAY_FORMAT = "dd/MM/yyyy";
 
 export function DashboardPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -103,6 +109,9 @@ export function DashboardPage() {
   const [channelError, setChannelError] = useState<string | null>(null);
   const [modalSectorValue, setModalSectorValue] = useState("");
   const [modalChannelValue, setModalChannelValue] = useState("");
+  const [modalFromDate, setModalFromDate] = useState<Date | undefined>(undefined);
+  const [modalToDate, setModalToDate] = useState<Date | undefined>(undefined);
+  const [selectedRangeOverride, setSelectedRangeOverride] = useState<{ from: string; to: string } | null>(null);
 
   console.log("ddaData", ddaData);
 
@@ -125,6 +134,57 @@ export function DashboardPage() {
   const channelPlaceholder = requiresBrandSelect
     ? "Sélectionnez une marque"
     : "Sélectionnez une chaîne";
+
+  const displayDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat("fr-FR", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+    []
+  );
+
+  const normalizeDate = useCallback((date: Date) => {
+    const normalized = new Date(date);
+    normalized.setHours(12, 0, 0, 0);
+    return normalized;
+  }, []);
+
+  const computeDefaultRange = useCallback(() => {
+    const today = normalizeDate(new Date());
+    const start = new Date(today);
+    start.setDate(start.getDate() - 2030);
+    const normalizedStart = normalizeDate(start);
+    return { from: normalizedStart, to: today };
+  }, [normalizeDate]);
+
+  const toISODateString = useCallback(
+    (date: Date) => normalizeDate(date).toISOString().split("T")[0],
+    [normalizeDate]
+  );
+
+  const parseISODate = useCallback(
+    (value: string) => {
+      const [year, month, day] = value.split("-").map(Number);
+      return normalizeDate(new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1));
+    },
+    [normalizeDate]
+  );
+
+  const effectiveDateRange = useMemo(() => {
+    const defaultRange = computeDefaultRange();
+    const fromISO = selectedRangeOverride?.from ?? toISODateString(defaultRange.from);
+    const toISO = selectedRangeOverride?.to ?? toISODateString(defaultRange.to);
+    return { from: fromISO, to: toISO };
+  }, [selectedRangeOverride, computeDefaultRange, toISODateString]);
+
+  const effectiveDateLabel = useMemo(() => {
+    return {
+      from: displayDateFormatter.format(parseISODate(effectiveDateRange.from)),
+      to: displayDateFormatter.format(parseISODate(effectiveDateRange.to)),
+    };
+  }, [effectiveDateRange, parseISODate, displayDateFormatter]);
 
   useEffect(() => {
     if (productCode !== "metv" || !tokens?.access) {
@@ -254,15 +314,27 @@ export function DashboardPage() {
     loadChannelOptions(modalSectorValue, modalChannelValue);
   }, [filterDialogOpen, modalSectorValue, modalChannelValue, loadChannelOptions]);
 
+  const effectiveSector =
+    selectedSectorOverride ?? selectedWorkspace?.sector_activity ?? "";
+  const effectiveChannel =
+    selectedChannelOverride ?? selectedWorkspace?.id_client ?? "";
+  const isCustomFilterActive = Boolean(
+    selectedSectorOverride || selectedChannelOverride || selectedRangeOverride
+  );
+
   useEffect(() => {
     setSelectedSectorOverride(null);
     setSelectedChannelOverride(null);
+    setSelectedRangeOverride(null);
     setModalSectorValue("");
     setModalChannelValue("");
+    const defaultRange = computeDefaultRange();
+    setModalFromDate(defaultRange.from);
+    setModalToDate(defaultRange.to);
     setChannelOptions([]);
     setChannelError(null);
     setFilterDialogOpen(false);
-  }, [selectedWorkspace?.id]);
+  }, [selectedWorkspace?.id, computeDefaultRange]);
 
   useEffect(() => {
     if (!selectedWorkspace || !tokens?.access) {
@@ -275,25 +347,21 @@ export function DashboardPage() {
       return;
     }
 
-    const sector =
-      selectedSectorOverride ?? selectedWorkspace.sector_activity ?? "";
-    const channel =
-      selectedChannelOverride ?? selectedWorkspace.id_client ?? "";
-
-    if (!sector || !channel) {
+    if (!effectiveSector || !effectiveChannel) {
       setDdaData(null);
       return;
     }
 
-    const end = new Date();
-    const start = new Date(end);
-    start.setDate(end.getDate() - 2030);
-
-    const format = (date: Date) => date.toISOString().split("T")[0];
     setDdaLoading(true);
     setDdaError(null);
 
-    fetchDeepDiveAnalysis("metv", sector, channel, format(start), format(end))
+    fetchDeepDiveAnalysis(
+      productCode,
+      effectiveSector,
+      effectiveChannel,
+      effectiveDateRange.from,
+      effectiveDateRange.to
+    )
       .then((response) => {
         setDdaData(response);
         console.log("Deep Dive Analysis response:", response);
@@ -307,11 +375,13 @@ export function DashboardPage() {
       })
       .finally(() => setDdaLoading(false));
   }, [
-    selectedWorkspace,
+    selectedWorkspace?.id,
     tokens?.access,
-    selectedSectorOverride,
-    selectedChannelOverride,
     productCode,
+    effectiveSector,
+    effectiveChannel,
+    effectiveDateRange.from,
+    effectiveDateRange.to,
   ]);
 
   const workspaceLabel = useMemo(() => {
@@ -330,14 +400,6 @@ export function DashboardPage() {
     navigate(buildPath.dashboard(workspace.id), { replace: isSame });
   };
 
-  const effectiveSector =
-    selectedSectorOverride ?? selectedWorkspace?.sector_activity ?? "";
-  const effectiveChannel =
-    selectedChannelOverride ?? selectedWorkspace?.id_client ?? "";
-  const isCustomFilterActive = Boolean(
-    selectedSectorOverride || selectedChannelOverride
-  );
-
   const handleOpenFilterDialog = () => {
     if (!selectedWorkspace) {
       return;
@@ -347,9 +409,18 @@ export function DashboardPage() {
       selectedSectorOverride ?? selectedWorkspace.sector_activity ?? "";
     const baseChannel =
       selectedChannelOverride ?? selectedWorkspace.id_client ?? "";
+    const defaultRange = computeDefaultRange();
+    const baseRange = selectedRangeOverride
+      ? {
+          from: parseISODate(selectedRangeOverride.from),
+          to: parseISODate(selectedRangeOverride.to),
+        }
+      : defaultRange;
 
     setModalSectorValue(baseSector);
     setModalChannelValue(baseChannel);
+    setModalFromDate(baseRange?.from);
+    setModalToDate(baseRange?.to);
     setFilterDialogOpen(true);
 
     if (baseSector) {
@@ -365,8 +436,40 @@ export function DashboardPage() {
       return;
     }
 
-    setSelectedSectorOverride(modalSectorValue);
-    setSelectedChannelOverride(modalChannelValue);
+    if (!selectedWorkspace) {
+      toast.error("Sélectionnez un workspace actif.");
+      return;
+    }
+
+    if (!modalFromDate || !modalToDate) {
+      toast.error("Merci de sélectionner une période complète.");
+      return;
+    }
+
+    if (modalFromDate > modalToDate) {
+      toast.error("La date de fin doit être postérieure à la date de début.");
+      return;
+    }
+
+    const normalizedFrom = normalizeDate(modalFromDate);
+    const normalizedTo = normalizeDate(modalToDate);
+    const fromISO = toISODateString(normalizedFrom);
+    const toISO = toISODateString(normalizedTo);
+    const defaultRange = computeDefaultRange();
+    const defaultFromISO = toISODateString(defaultRange.from);
+    const defaultToISO = toISODateString(defaultRange.to);
+    const isDefaultRange = fromISO === defaultFromISO && toISO === defaultToISO;
+
+    const defaultSector = selectedWorkspace.sector_activity ?? "";
+    const defaultChannel = selectedWorkspace.id_client ?? "";
+    const nextSectorOverride =
+      modalSectorValue !== defaultSector ? modalSectorValue : null;
+    const nextChannelOverride =
+      modalChannelValue !== defaultChannel ? modalChannelValue : null;
+
+    setSelectedSectorOverride(nextSectorOverride);
+    setSelectedChannelOverride(nextChannelOverride);
+    setSelectedRangeOverride(isDefaultRange ? null : { from: fromISO, to: toISO });
     setFilterDialogOpen(false);
   };
 
@@ -376,17 +479,25 @@ export function DashboardPage() {
       setSelectedChannelOverride(null);
       setModalSectorValue("");
       setModalChannelValue("");
+      setSelectedRangeOverride(null);
+      const defaultRange = computeDefaultRange();
+      setModalFromDate(defaultRange.from);
+      setModalToDate(defaultRange.to);
       setFilterDialogOpen(false);
       return;
     }
 
     const defaultSector = selectedWorkspace.sector_activity ?? "";
     const defaultChannel = selectedWorkspace.id_client ?? "";
+    const defaultRange = computeDefaultRange();
 
     setSelectedSectorOverride(null);
     setSelectedChannelOverride(null);
+    setSelectedRangeOverride(null);
     setModalSectorValue(defaultSector);
     setModalChannelValue(defaultChannel);
+    setModalFromDate(defaultRange.from);
+    setModalToDate(defaultRange.to);
     setChannelError(null);
     if (defaultSector) {
       loadChannelOptions(defaultSector, defaultChannel);
@@ -421,7 +532,10 @@ export function DashboardPage() {
             Bienvenue sur VDM !
           </h1>
         </div>
+        {/* <div className="flex w-full flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end"> */}
         <div className="flex w-full flex-col items-end gap-3 sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex flex-col gap-4">
+
           <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -501,11 +615,19 @@ export function DashboardPage() {
               </Button>
             ) : null}
           </div>
-          {productCode === "metv" && isCustomFilterActive ? (
-            <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
-              Filtres personnalisés actifs
-            </span>
+          {productCode === "metv" ? (
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-sm text-muted-foreground">
+                Période analysée : {effectiveDateLabel.from} → {effectiveDateLabel.to}
+              </span>
+              {isCustomFilterActive ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
+                  Filtres personnalisés actifs
+                </span>
+              ) : null}
+            </div>
           ) : null}
+          </div>
         </div>
       </header>
       {productCode === "metv" ? (
@@ -610,6 +732,32 @@ export function DashboardPage() {
                 <p className="text-xs font-medium text-destructive">{channelError}</p>
               ) : null}
             </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-foreground">
+                Période analysée
+              </Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <DatePickerField
+                  id="dda-date-from"
+                  placeholder="JJ/MM/AAAA"
+                  date={modalFromDate}
+                  onChange={setModalFromDate}
+                  normalizeDate={normalizeDate}
+                />
+                <DatePickerField
+                  id="dda-date-to"
+                  placeholder="JJ/MM/AAAA"
+                  date={modalToDate}
+                  onChange={setModalToDate}
+                  normalizeDate={normalizeDate}
+                />
+              </div>
+              {!modalFromDate || !modalToDate ? (
+                <p className="text-xs text-muted-foreground">
+                  Sélectionnez un intervalle de dates complet.
+                </p>
+              ) : null}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -630,7 +778,11 @@ export function DashboardPage() {
               type="button"
               onClick={handleApplyFilters}
               disabled={
-                !modalSectorValue || !modalChannelValue || channelLoading
+                !modalSectorValue ||
+                !modalChannelValue ||
+                channelLoading ||
+                !modalFromDate ||
+                !modalToDate
               }
               className="bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
             >
@@ -672,5 +824,62 @@ function ComingSoonDashboard({ productName }: { productName: string | null }) {
         </div>
       </div>
     </section>
+  );
+}
+
+interface DatePickerFieldProps {
+  id: string;
+  placeholder: string;
+  date: Date | undefined;
+  onChange: (next: Date | undefined) => void;
+  normalizeDate: (date: Date) => Date;
+}
+
+function DatePickerField({ id, placeholder, date, onChange, normalizeDate }: DatePickerFieldProps) {
+  const [open, setOpen] = useState(false);
+  const [month, setMonth] = useState<Date>(() => date ?? new Date());
+
+  useEffect(() => {
+    if (date) {
+      const normalized = normalizeDate(date);
+      setMonth(normalized);
+    } else {
+    }
+  }, [date, normalizeDate]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          id={id}
+          className="inline-flex w-full items-center justify-between gap-2 rounded-lg border border-border/60 bg-white px-3 py-2 text-sm font-medium text-foreground hover:border-[#0c6e85]/40 sm:w-auto"
+        >
+          {date ? format(normalizeDate(date), INPUT_DISPLAY_FORMAT) : placeholder}
+          <CalendarIcon className="h-4 w-4 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto overflow-hidden p-0" align="start">
+        <Calendar
+          mode="single"
+          month={month}
+          onMonthChange={setMonth}
+          selected={date}
+          captionLayout="dropdown"
+          onSelect={(selected) => {
+            if (!selected) {
+              onChange(undefined);
+              return;
+            }
+            const normalized = normalizeDate(selected);
+            onChange(normalized);
+            setMonth(normalized);
+            setOpen(false);
+          }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

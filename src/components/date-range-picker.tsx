@@ -34,6 +34,10 @@ const presetRanges = [
 export function DateRangePicker({ value, onChange, className }: DateRangePickerProps) {
   const [range, setRange] = React.useState<DateRange | undefined>(value)
 
+  React.useEffect(() => {
+    setRange(value)
+  }, [value])
+
   const label = React.useMemo(() => {
     if (!range?.from && !range?.to) {
       return "Choisir une période"
