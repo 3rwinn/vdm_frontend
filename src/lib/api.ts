@@ -203,3 +203,306 @@ export function fetchDeepDiveAnalysis(
   )}/${encodeURIComponent(dateFrom)}/${encodeURIComponent(dateTo)}`;
   return request<DdaResponse>(path, { method: "GET" });
 }
+
+export interface MepValueEntry {
+  marque: string;
+  value: number | string;
+}
+
+export interface MepMetricsEntry {
+  duree_commerciale: string;
+  nb_spots: number;
+  valorisation: string;
+}
+
+export interface MepHourlyEntry {
+  annonceur: MepMetricsEntry;
+  global: MepMetricsEntry;
+}
+
+export interface MepAnalysisResponse {
+  success: boolean;
+  mep_analysis: {
+    annonceur: MepMetricsEntry;
+    concurrence: MepMetricsEntry;
+    classement_produit: {
+      global: {
+        top_20_spots: MepValueEntry[];
+        top_20_valorisation: MepValueEntry[];
+        top_20_duration: MepValueEntry[];
+      };
+      specific: {
+        top_20_spots: MepValueEntry[];
+        top_20_valorisation: MepValueEntry[];
+        top_20_duration: MepValueEntry[];
+      };
+    };
+    hourly_data: Record<string, MepHourlyEntry>;
+    days_data: Record<string, MepHourlyEntry>;
+    channels_breakdown: Array<{
+      chaine: string;
+      nb_spots: number;
+      valorisation: string | number;
+      duree_commerciale: string;
+    }>;
+  };
+}
+
+export function fetchMepAnalysis(
+  annonceur: string,
+  dateFrom: string,
+  dateTo: string
+) {
+  const path = `/datas/anonceur/${encodeURIComponent(annonceur)}/${encodeURIComponent(
+    dateFrom
+  )}/${encodeURIComponent(dateTo)}`;
+  return request<MepAnalysisResponse>(path, { method: "GET" });
+}
+
+export interface MemChannelEntry {
+  chaine: string;
+  nb_spots: number;
+  valorisation: string;
+  duree_commerciale: string;
+}
+
+export interface MemRankingEntry {
+  value: number | string;
+  [key: string]: string | number;
+}
+
+export interface MemHourlyEntry {
+  nb_spots: number;
+  valorisation: string;
+  duree_commerciale: string;
+}
+
+export interface MemAnalysisResponse {
+  global: {
+    nb_spots: number;
+    valorisation: string;
+    duree_commerciale: string;
+  };
+  chains: MemChannelEntry[];
+  classement_annonceurs: {
+    top_spots: Array<{ annonceur: string; value: number | string }>;
+    top_valorisation: Array<{ annonceur: string; value: number | string }>;
+    top_duree: Array<{ annonceur: string; value: number | string }>;
+  };
+  classement_secteurs: {
+    top_spots: Array<{ secteur: string; value: number | string }>;
+    top_valorisation: Array<{ secteur: string; value: number | string }>;
+    top_duree: Array<{ secteur: string; value: number | string }>;
+  };
+  hourly_data: Record<string, MemHourlyEntry>;
+  weekly_data: Record<
+    string,
+    {
+      nb_spots: number;
+      valorisation: string;
+    }
+  >;
+  monthly_data: Array<{
+    mois: string;
+    nb_spots: number;
+    valorisation: string;
+  }>;
+}
+
+export interface CleanDataRecord {
+  id: number;
+  chaine: string | null;
+  secteur_activite: string | null;
+  annonceur: string | null;
+  marque: string | null;
+  titre: string | null;
+  station_type: string | null;
+  date_debut: string;
+  date_fin: string;
+  date: string;
+  heure: number | null;
+  duration: string | null;
+  duree_seconds: number | string | null;
+  day_of_week: number | null;
+  valorization: number | string | null;
+}
+
+export interface CleanDataResponse {
+  datas: CleanDataRecord[];
+}
+
+export interface ReportsQueryParams {
+  sector?: string;
+  channel?: string;
+  advertiser?: string;
+  marque?: string;
+  stationType?: string;
+  search?: string;
+  from?: string;
+  to?: string;
+  dayOfWeek?: string;
+  hour?: string;
+}
+
+function buildReportsQueryString(filters: ReportsQueryParams) {
+  const params = new URLSearchParams();
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  if (filters.sector) params.set("sector", filters.sector);
+  if (filters.channel) params.set("channel", filters.channel);
+  if (filters.advertiser) params.set("advertiser", filters.advertiser);
+  if (filters.marque) params.set("marque", filters.marque);
+  if (filters.stationType) params.set("station_type", filters.stationType);
+  if (filters.search) params.set("search", filters.search);
+  if (filters.dayOfWeek) params.set("day_of_week", filters.dayOfWeek);
+  if (filters.hour) params.set("hour", filters.hour);
+  return params.toString();
+}
+
+export function fetchReportsData(
+  productCode: string | null,
+  filters: ReportsQueryParams,
+  token?: string
+) {
+  if (!productCode) {
+    throw new Error("Aucun produit sélectionné pour ce workspace.");
+  }
+
+  const queryString = buildReportsQueryString(filters);
+  const suffix = queryString ? `?${queryString}` : "";
+
+  if (productCode === "metv" || productCode === "mer") {
+    const sector = filters.sector?.trim();
+    const channel = filters.channel?.trim();
+    if (!sector || !channel) {
+      throw new Error("Veuillez préciser le secteur et la chaîne suivie.");
+    }
+    const path = `/datas/chaine/${encodeURIComponent(channel)}/sector/${encodeURIComponent(
+      sector
+    )}${suffix}`;
+    return request<CleanDataResponse>(path, { token });
+  }
+
+  if (productCode === "mep") {
+    const sector = filters.sector?.trim();
+    const advertiser = filters.advertiser?.trim();
+    if (!sector || !advertiser) {
+      throw new Error("Veuillez préciser le secteur et l'annonceur suivi.");
+    }
+    const path = `/datas/annonceur/${encodeURIComponent(
+      advertiser
+    )}/sector/${encodeURIComponent(sector)}${suffix}`;
+    return request<CleanDataResponse>(path, { token });
+  }
+
+  if (productCode === "mem") {
+    const path = `/datas/all/${suffix}`;
+    return request<CleanDataResponse>(path, { token });
+  }
+
+  throw new Error("Produit non pris en charge pour les rapports.");
+}
+
+export function fetchMemAnalysis(dateFrom?: string, dateTo?: string) {
+  const params = new URLSearchParams();
+  if (dateFrom) params.set("from", dateFrom);
+  if (dateTo) params.set("to", dateTo);
+  const query = params.toString();
+  const path = query ? `/mem/?${query}` : "/mem/";
+  return request<MemAnalysisResponse>(path, { method: "GET" });
+}
+
+export interface SimulationRequest {
+  advertiser: string;
+  investmentAmount: number;
+  advertisementDuration: number;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface SimulationChannelAllocation {
+  suggested_investment: number;
+  optimal_time_slots: string[];
+  impact_level: string;
+  estimated_spots: number;
+  avg_duration: number;
+  avg_cost_per_spot: number;
+  current_share: string;
+}
+
+export interface SimulationRecommendations {
+  is_new_advertiser: boolean;
+  sector: string | null;
+  channel_allocation: Record<string, SimulationChannelAllocation>;
+  total_budget: number;
+  duration: number;
+  campaign_period: {
+    start: string;
+    end: string;
+    total_days: number;
+  };
+}
+
+export interface SimulationResponsePayload {
+  success: boolean;
+  recommendations: SimulationRecommendations;
+}
+
+export function runSimulation(
+  { advertiser, investmentAmount, advertisementDuration, dateFrom, dateTo }: SimulationRequest,
+  token: string
+) {
+  const roundedInvestment = Math.round(investmentAmount)
+  const roundedDuration = Math.round(advertisementDuration)
+  const path = `/recommendation/${encodeURIComponent(advertiser)}/${encodeURIComponent(
+    roundedInvestment
+  )}/${encodeURIComponent(roundedDuration)}/${encodeURIComponent(dateFrom)}/${encodeURIComponent(dateTo)}`;
+  return request<SimulationResponsePayload>(path, { token });
+}
+
+export type PigeReportType = "channel" | "advertiser";
+
+interface DownloadPigeReportParams {
+  type: PigeReportType;
+  sector: string;
+  identifier: string;
+  token?: string;
+}
+
+export async function downloadPigeReport({
+  type,
+  sector,
+  identifier,
+  token,
+}: DownloadPigeReportParams): Promise<Blob> {
+  let path: string;
+  if (type === "channel") {
+    path = `/pige/${encodeURIComponent(sector)}/${encodeURIComponent(identifier)}`;
+  } else if (type === "advertiser") {
+    path = `/pige/annonceur/${encodeURIComponent(sector)}/${encodeURIComponent(
+      identifier
+    )}`;
+  } else {
+    throw new Error("Type de rapport PIGE non supporté.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    let errorMessage = response.statusText;
+    try {
+      const data = await response.json();
+      errorMessage = data?.error || data?.message || JSON.stringify(data);
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(errorMessage || "Impossible de générer le rapport PIGE.");
+  }
+
+  return response.blob();
+}

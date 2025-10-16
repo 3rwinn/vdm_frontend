@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   ChartContainer,
   ChartTooltip,
@@ -9,13 +8,7 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from "@/components/ui/chart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import {
   Pagination,
   PaginationContent,
@@ -72,8 +65,6 @@ export function MetvDashboard({
     }
     return [];
   }, [ddaData?.data?.metrics?.time_slot_metrics]);
-
-  console.log("@TIMESLOTDATAS", timeSlotData);
 
   const dailyMetricData = useMemo(() => {
     const converted = convertDailyMetricsToChartData(
@@ -207,7 +198,9 @@ export function MetvDashboard({
 
                   <ChartTooltip
                     cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
-                    labelFormatter={(value) => moment(value).format("DD/MM/YYY")}
+                    labelFormatter={(value) =>
+                      moment(value).format("DD/MM/YYY")
+                    }
                     content={<ChartTooltipContent />}
                   />
                   <Area dataKey="spots" fill="#0c6e85" type="linear" />
@@ -275,7 +268,6 @@ export function MetvDashboard({
               <p className="text-xs uppercase tracking-wide text-muted-foreground/70">
                 Valorisation par heure de passage des spots
               </p>
-             
             </div>
           </div>
           <div className="mt-6 ">
@@ -479,15 +471,11 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
       <Card className="rounded-3xl border-none bg-white p-6 shadow-lg">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
-            
             <p className="text-sm text-muted-foreground">
               Nombre de spots par jour sur le secteur
             </p>
-            <h3 className="text-2xl font-semibold text-foreground">
-              {sector}
-            </h3>
+            <h3 className="text-2xl font-semibold text-foreground">{sector}</h3>
           </div>
-          
         </div>
 
         <div className="mt-8 grid gap-6">
@@ -527,7 +515,9 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
                     <ChartTooltip
                       cursor={{ fill: "rgba(12, 110, 133, 0.08)" }}
                       content={<ChartTooltipContent />}
-                      labelFormatter={(value) => moment(value).format("DD/MM/YYYY")}
+                      labelFormatter={(value) =>
+                        moment(value).format("DD/MM/YYYY")
+                      }
                     />
                     <ChartLegend content={<ChartLegendContent />} />
                     <Bar dataKey="spots" radius={[6, 6, 0, 0]} fill="#0c6e85" />
@@ -553,8 +543,7 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
                   Taux d'occupation sur le secteur
                 </p>
                 <h3 className="text-lg font-semibold text-foreground">
-                 {sector}
-                  
+                  {sector}
                 </h3>
               </div>
               {/* <span className="inline-flex items-center gap-2 rounded-full bg-[#0c6e85]/10 px-3 py-1 text-xs font-semibold text-[#0c6e85]">
@@ -626,8 +615,6 @@ function SectorAnalysisSection({ datas, sector, chaine }) {
                     de la valeur du secteur.
                   </span>
                 </div>
-
-              
               </div>
             </div>
           </div>

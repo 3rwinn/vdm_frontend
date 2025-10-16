@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { format, isValid, parse } from "date-fns";
+import { format } from "date-fns";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { DashboardShell } from "@/components/layouts/dashboard-shell";
@@ -18,7 +18,11 @@ import {
   fetchBrandsBySector,
   fetchChainsBySector,
   fetchDeepDiveAnalysis,
+  fetchMemAnalysis,
+  fetchMepAnalysis,
   fetchSectors,
+  type MemAnalysisResponse,
+  type MepAnalysisResponse,
   type WorkspaceResponse,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -30,6 +34,8 @@ import {
 import { buildPath, paths } from "@/routes/paths";
 import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown";
 import { MetvDashboard } from "@/pages/dashboard/metv-dashboard";
+import { MepDashboard } from "@/pages/dashboard/mep-dashboard";
+import { MemDashboard } from "@/pages/dashboard/mem-dashboard";
 import {
   Dialog,
   DialogContent,
@@ -47,7 +53,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon, Settings2 } from "lucide-react";
 import { toast } from "sonner";
@@ -95,8 +100,10 @@ export function DashboardPage() {
   }, [workspaceId, workspaceFromState, navigate]);
 
   const [ddaData, setDdaData] = useState(null);
+  const [mepData, setMepData] = useState<MepAnalysisResponse | null>(null);
   const [ddaError, setDdaError] = useState<string | null>(null);
   const [ddaLoading, setDdaLoading] = useState(false);
+  const [memData, setMemData] = useState<MemAnalysisResponse | null>(null);
 
   const [selectedSectorOverride, setSelectedSectorOverride] = useState<string | null>(null);
   const [selectedChannelOverride, setSelectedChannelOverride] = useState<string | null>(null);
@@ -113,27 +120,27 @@ export function DashboardPage() {
   const [modalToDate, setModalToDate] = useState<Date | undefined>(undefined);
   const [selectedRangeOverride, setSelectedRangeOverride] = useState<{ from: string; to: string } | null>(null);
 
-  console.log("ddaData", ddaData);
-
   const workspaceProducts = useMemo(
     () => selectedWorkspace?.products_details ?? [],
     [selectedWorkspace?.products_details]
   );
   const activeProduct = workspaceProducts[0] ?? null;
   const productCode = activeProduct?.code
-    ? String(activeProduct.code).toLowerCase()
+    ? String(activeProduct.code).trim().toLowerCase()
     : null;
-  const requiresBrandSelect = useMemo(() => productCode === "mep", [productCode]);
+  const isMetv = productCode === "metv";
+  const isMep = productCode === "mep";
+  const isMem = productCode === "mem";
+  const requiresBrandSelect = isMep;
+  const needsChannelSelection = isMetv || requiresBrandSelect;
+  const canConfigureFilters = isMetv || isMep || isMem;
 
-  console.log("workspaceProducts", workspaceProducts);
-
-  const channelSelectLabel = useMemo(
-    () => (requiresBrandSelect ? "Marque / produit" : "Chaîne"),
-    [requiresBrandSelect]
-  );
-  const channelPlaceholder = requiresBrandSelect
-    ? "Sélectionnez une marque"
-    : "Sélectionnez une chaîne";
+  const channelSelectLabel = useMemo(() => {
+    return requiresBrandSelect ? "Produit / marque" : "Chaîne";
+  }, [requiresBrandSelect]);
+  const channelPlaceholder = useMemo(() => {
+    return requiresBrandSelect ? "Sélectionnez un produit / marque" : "Sélectionnez une chaîne";
+  }, [requiresBrandSelect]);
 
   const displayDateFormatter = useMemo(
     () =>
@@ -187,7 +194,7 @@ export function DashboardPage() {
   }, [effectiveDateRange, parseISODate, displayDateFormatter]);
 
   useEffect(() => {
-    if (productCode !== "metv" || !tokens?.access) {
+    if (!needsChannelSelection || !tokens?.access) {
       setSectorOptions([]);
       setSectorError(null);
       setSectorLoading(false);
@@ -227,18 +234,12 @@ export function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [tokens?.access, productCode]);
+  }, [tokens?.access, isMetv, requiresBrandSelect]);
 
   const loadChannelOptions = useCallback(
     async (sectorValue: string, preselected?: string) => {
-      if (productCode !== "metv") {
-        setChannelOptions([]);
-        setChannelError(null);
-        setChannelLoading(false);
-        return;
-      }
-
-      if (!tokens?.access || !sectorValue) {
+      const normalizedSector = sectorValue.trim();
+      if (!tokens?.access || !normalizedSector) {
         setChannelOptions([]);
         return;
       }
@@ -247,28 +248,11 @@ export function DashboardPage() {
       setChannelError(null);
 
       try {
-        const activeChannel = preselected ?? modalChannelValue;
+        const activeChannelRaw = preselected ?? modalChannelValue;
+        const activeChannelTrimmed = activeChannelRaw?.trim();
 
-        if (requiresBrandSelect) {
-          const response = await fetchBrandsBySector(sectorValue, tokens.access);
-          const brands = response.marques ?? [];
-          const mapped = brands.map((brand) => ({
-            value: brand,
-            label: brand,
-          }));
-          const next = [...mapped];
-          if (
-            activeChannel &&
-            !next.some((option) => option.value === activeChannel)
-          ) {
-            next.unshift({
-              value: activeChannel,
-              label: activeChannel,
-            });
-          }
-          setChannelOptions(next);
-        } else {
-          const response = await fetchChainsBySector(sectorValue, tokens.access);
+        if (isMetv) {
+          const response = await fetchChainsBySector(normalizedSector, tokens.access);
           const chains = response.chaines ?? [];
           const mapped = chains.map((chain) => ({
             value: chain,
@@ -276,32 +260,58 @@ export function DashboardPage() {
           }));
           const next = [...mapped];
           if (
-            activeChannel &&
-            !next.some((option) => option.value === activeChannel)
+            activeChannelTrimmed &&
+            !next.some((option) => option.value.trim() === activeChannelTrimmed)
           ) {
             next.unshift({
-              value: activeChannel,
-              label: activeChannel,
+              value: activeChannelRaw,
+              label: activeChannelRaw,
             });
           }
           setChannelOptions(next);
+        } else if (requiresBrandSelect) {
+          const response = await fetchBrandsBySector(normalizedSector, tokens.access);
+          const brands = response.marques ?? [];
+          const mapped = brands.map((brand) => ({
+            value: brand,
+            label: brand,
+          }));
+          const next = [...mapped];
+          if (
+            activeChannelTrimmed &&
+            !next.some((option) => option.value.trim() === activeChannelTrimmed)
+          ) {
+            next.unshift({
+              value: activeChannelRaw,
+              label: activeChannelRaw,
+            });
+          }
+          setChannelOptions(next);
+        } else {
+          setChannelOptions([]);
         }
       } catch (error) {
         setChannelError(
           error instanceof Error
             ? error.message
-            : "Impossible de charger les chaînes."
+            : isMetv
+            ? "Impossible de charger les chaînes."
+            : "Impossible de charger les produits / marques."
         );
         setChannelOptions([]);
       } finally {
         setChannelLoading(false);
       }
     },
-    [tokens?.access, requiresBrandSelect, modalChannelValue, productCode]
+    [tokens?.access, requiresBrandSelect, modalChannelValue, isMetv]
   );
 
   useEffect(() => {
     if (!filterDialogOpen) {
+      return;
+    }
+
+    if (!(isMetv || requiresBrandSelect)) {
       return;
     }
 
@@ -312,12 +322,21 @@ export function DashboardPage() {
     }
 
     loadChannelOptions(modalSectorValue, modalChannelValue);
-  }, [filterDialogOpen, modalSectorValue, modalChannelValue, loadChannelOptions]);
+  }, [
+    filterDialogOpen,
+    modalSectorValue,
+    modalChannelValue,
+    loadChannelOptions,
+    isMetv,
+    requiresBrandSelect,
+  ]);
 
   const effectiveSector =
     selectedSectorOverride ?? selectedWorkspace?.sector_activity ?? "";
   const effectiveChannel =
     selectedChannelOverride ?? selectedWorkspace?.id_client ?? "";
+  const fetchSectorIdentifier = effectiveSector.trim();
+  const fetchChannelIdentifier = effectiveChannel.trim();
   const isCustomFilterActive = Boolean(
     selectedSectorOverride || selectedChannelOverride || selectedRangeOverride
   );
@@ -339,39 +358,107 @@ export function DashboardPage() {
   useEffect(() => {
     if (!selectedWorkspace || !tokens?.access) {
       setDdaData(null);
+      setMepData(null);
+      setMemData(null);
       return;
     }
 
     if (productCode !== "metv") {
       setDdaData(null);
-      return;
     }
 
-    if (!effectiveSector || !effectiveChannel) {
-      setDdaData(null);
+    if (productCode !== "mep") {
+      setMepData(null);
+    }
+
+    if (productCode !== "mem") {
+      setMemData(null);
+    }
+
+    if (productCode !== "metv" && productCode !== "mep" && productCode !== "mem") {
+      setDdaLoading(false);
+      setDdaError(null);
       return;
     }
 
     setDdaLoading(true);
     setDdaError(null);
 
-    fetchDeepDiveAnalysis(
-      productCode,
-      effectiveSector,
-      effectiveChannel,
-      effectiveDateRange.from,
-      effectiveDateRange.to
-    )
+    if (productCode === "metv") {
+      if (!fetchSectorIdentifier || !fetchChannelIdentifier) {
+        setDdaData(null);
+        setDdaLoading(false);
+        return;
+      }
+
+      fetchDeepDiveAnalysis(
+        productCode,
+        fetchSectorIdentifier,
+        fetchChannelIdentifier,
+        effectiveDateRange.from,
+        effectiveDateRange.to
+      )
+        .then((response) => {
+          setDdaData(response);
+          setMepData(null);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch deep dive analysis:", error);
+          setDdaError(
+            error instanceof Error ? error.message : "Analyse indisponible"
+          );
+          setDdaData(null);
+        })
+        .finally(() => setDdaLoading(false));
+      return;
+    }
+
+    if (!fetchChannelIdentifier) {
+      setMepData(null);
+      setDdaLoading(false);
+      return;
+    }
+
+    if (productCode === "mep") {
+      if (!fetchChannelIdentifier) {
+        setMepData(null);
+        setDdaLoading(false);
+        return;
+      }
+
+      fetchMepAnalysis(
+        effectiveChannel,
+        effectiveDateRange.from,
+        effectiveDateRange.to
+      )
+        .then((response) => {
+          setMepData(response);
+          setDdaData(null);
+          setMemData(null);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch MEP analysis:", error);
+          setDdaError(
+            error instanceof Error ? error.message : "Analyse indisponible"
+          );
+          setMepData(null);
+        })
+        .finally(() => setDdaLoading(false));
+      return;
+    }
+
+    fetchMemAnalysis(effectiveDateRange.from, effectiveDateRange.to)
       .then((response) => {
-        setDdaData(response);
-        console.log("Deep Dive Analysis response:", response);
+        setMemData(response);
+        setMepData(null);
+        setDdaData(null);
       })
       .catch((error) => {
-        console.error("Failed to fetch deep dive analysis:", error);
+        console.error("Failed to fetch MEM analysis:", error);
         setDdaError(
           error instanceof Error ? error.message : "Analyse indisponible"
         );
-        setDdaData(null);
+        setMemData(null);
       })
       .finally(() => setDdaLoading(false));
   }, [
@@ -405,10 +492,12 @@ export function DashboardPage() {
       return;
     }
 
-    const baseSector =
+    const baseSectorRaw =
       selectedSectorOverride ?? selectedWorkspace.sector_activity ?? "";
-    const baseChannel =
+    const baseChannelRaw =
       selectedChannelOverride ?? selectedWorkspace.id_client ?? "";
+    const baseSector = baseSectorRaw.trim();
+    const baseChannel = baseChannelRaw.trim();
     const defaultRange = computeDefaultRange();
     const baseRange = selectedRangeOverride
       ? {
@@ -423,7 +512,7 @@ export function DashboardPage() {
     setModalToDate(baseRange?.to);
     setFilterDialogOpen(true);
 
-    if (baseSector) {
+    if ((isMetv || requiresBrandSelect) && baseSector) {
       loadChannelOptions(baseSector, baseChannel);
     } else {
       setChannelOptions([]);
@@ -431,8 +520,19 @@ export function DashboardPage() {
   };
 
   const handleApplyFilters = () => {
-    if (!modalSectorValue || !modalChannelValue) {
-      toast.error("Merci de sélectionner un secteur et une chaîne.");
+    if (needsChannelSelection && !modalSectorValue) {
+      toast.error("Merci de sélectionner un secteur.");
+      return;
+    }
+
+    const sanitizedChannel = modalChannelValue.trim();
+
+    if (needsChannelSelection && !sanitizedChannel) {
+      toast.error(
+        requiresBrandSelect
+          ? "Merci de sélectionner un produit / marque."
+          : "Merci de sélectionner une chaîne."
+      );
       return;
     }
 
@@ -460,12 +560,23 @@ export function DashboardPage() {
     const defaultToISO = toISODateString(defaultRange.to);
     const isDefaultRange = fromISO === defaultFromISO && toISO === defaultToISO;
 
-    const defaultSector = selectedWorkspace.sector_activity ?? "";
-    const defaultChannel = selectedWorkspace.id_client ?? "";
+    const defaultSectorRaw = selectedWorkspace.sector_activity ?? "";
+    const defaultChannelRaw = selectedWorkspace.id_client ?? "";
+    const defaultSectorCanonical = defaultSectorRaw.trim();
+    const defaultChannelCanonical = defaultChannelRaw.trim();
+    const sectorValueCanonical = modalSectorValue.trim();
+    const channelValueCanonical = sanitizedChannel;
     const nextSectorOverride =
-      modalSectorValue !== defaultSector ? modalSectorValue : null;
+      needsChannelSelection &&
+      modalSectorValue &&
+      sectorValueCanonical !== defaultSectorCanonical
+        ? modalSectorValue
+        : null;
     const nextChannelOverride =
-      modalChannelValue !== defaultChannel ? modalChannelValue : null;
+      needsChannelSelection &&
+      channelValueCanonical !== defaultChannelCanonical
+        ? modalChannelValue
+        : null;
 
     setSelectedSectorOverride(nextSectorOverride);
     setSelectedChannelOverride(nextChannelOverride);
@@ -487,27 +598,28 @@ export function DashboardPage() {
       return;
     }
 
-    const defaultSector = selectedWorkspace.sector_activity ?? "";
-    const defaultChannel = selectedWorkspace.id_client ?? "";
+    const defaultSectorRaw = selectedWorkspace.sector_activity ?? "";
+    const defaultChannelRaw = selectedWorkspace.id_client ?? "";
+    const defaultSectorCanonical = defaultSectorRaw.trim();
     const defaultRange = computeDefaultRange();
 
     setSelectedSectorOverride(null);
     setSelectedChannelOverride(null);
     setSelectedRangeOverride(null);
-    setModalSectorValue(defaultSector);
-    setModalChannelValue(defaultChannel);
+    setModalSectorValue(defaultSectorRaw);
+    setModalChannelValue(defaultChannelRaw);
     setModalFromDate(defaultRange.from);
     setModalToDate(defaultRange.to);
     setChannelError(null);
-    if (defaultSector) {
-      loadChannelOptions(defaultSector, defaultChannel);
+    if (needsChannelSelection && defaultSectorCanonical) {
+      loadChannelOptions(defaultSectorRaw, defaultChannelRaw);
     } else {
       setChannelOptions([]);
     }
   };
 
-  const channelIdentifier = effectiveChannel;
-  const sectorIdentifier = effectiveSector;
+  const channelIdentifier = fetchChannelIdentifier;
+  const sectorIdentifier = fetchSectorIdentifier;
 
   if (!selectedWorkspace) {
     return (
@@ -598,7 +710,7 @@ export function DashboardPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {productCode === "metv" ? (
+            {canConfigureFilters ? (
               <Button
                 type="button"
                 variant="outline"
@@ -611,13 +723,13 @@ export function DashboardPage() {
                 )}
               >
                 <Settings2 className="h-4 w-4" />
-                <span className="sr-only">Modifier les filtres DDA</span>
+                <span className="sr-only">Configurer l&apos;analyse</span>
               </Button>
             ) : null}
           </div>
           {productCode === "metv" ? (
             <div className="flex flex-col items-end gap-1 text-right">
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 Période analysée : {effectiveDateLabel.from} → {effectiveDateLabel.to}
               </span>
               {isCustomFilterActive ? (
@@ -626,177 +738,233 @@ export function DashboardPage() {
                 </span>
               ) : null}
             </div>
+          ) : productCode === "mep" ? (
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-xs text-muted-foreground">
+                Produit / marque suivi : {channelIdentifier || "—"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Période : {effectiveDateLabel.from} → {effectiveDateLabel.to}
+              </span>
+              {isCustomFilterActive ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
+                  Filtres personnalisés actifs
+                </span>
+              ) : null}
+            </div>
+          ) : productCode === "mem" ? (
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-xs text-muted-foreground">
+                Vue d&apos;ensemble chaîne / annonceurs
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Période : {effectiveDateLabel.from} → {effectiveDateLabel.to}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Spots totaux :{" "}
+                {memData?.global.nb_spots.toLocaleString("fr-FR") ?? "—"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Valorisation : {memData?.global.valorisation ?? "—"}
+              </span>
+              {isCustomFilterActive ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
+                  Filtres personnalisés actifs
+                </span>
+              ) : null}
+            </div>
           ) : null}
+
           </div>
         </div>
       </header>
-      {productCode === "metv" ? (
+      {canConfigureFilters ? (
         <Dialog open={filterDialogOpen} onOpenChange={setFilterDialogOpen}>
           <DialogContent size="lg" className="space-y-6">
-          <DialogHeader>
-            <DialogTitle>Paramétrer l'analyse</DialogTitle>
-            <DialogDescription>
-              Ajustez le secteur suivi et la {requiresBrandSelect ? "marque" : "chaîne"} analysée pour ce
-              tableau de bord.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="dda-sector" className="text-sm font-medium text-foreground">
-                Secteur analysé
-              </Label>
-              <Select
-                value={modalSectorValue || undefined}
-                onValueChange={(value) => {
-                  setModalSectorValue(value);
-                  setModalChannelValue("");
-                }}
-                disabled={sectorLoading}
-              >
-                <SelectTrigger
-                  id="dda-sector"
-                  className="rounded-xl border border-border/60 bg-white text-sm font-medium"
-                >
-                  <SelectValue
-                    placeholder={
-                      sectorLoading ? "Chargement..." : "Sélectionnez un secteur"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {sectorLoading ? (
-                    <SelectItem value="__loading" disabled>
-                      Chargement...
-                    </SelectItem>
-                  ) : sectorOptions.length === 0 ? (
-                    <SelectItem value="__empty" disabled>
-                      Aucun secteur disponible
-                    </SelectItem>
-                  ) : (
-                    sectorOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {sectorError ? (
-                <p className="text-xs font-medium text-destructive">{sectorError}</p>
+            <DialogHeader>
+              <DialogTitle>Paramétrer l'analyse</DialogTitle>
+              <DialogDescription>
+                {isMetv
+                  ? "Ajustez le secteur suivi et la chaîne analysée pour ce workspace."
+                  : isMep
+                  ? "Ajustez le secteur et le produit / marque analysés pour ce workspace MEP."
+                  : "Sélectionnez un intervalle de dates pour explorer les tendances MEM."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5">
+              {needsChannelSelection ? (
+                <div className="space-y-2">
+                  <Label htmlFor="dda-sector" className="text-sm font-medium text-foreground">
+                    Secteur analysé
+                  </Label>
+                  <Select
+                    value={modalSectorValue || undefined}
+                    onValueChange={(value) => {
+                      setModalSectorValue(value);
+                      setModalChannelValue("");
+                    }}
+                    disabled={sectorLoading}
+                  >
+                    <SelectTrigger
+                      id="dda-sector"
+                      className="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                    >
+                      <SelectValue
+                        placeholder={
+                          sectorLoading ? "Chargement..." : "Sélectionnez un secteur"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sectorLoading ? (
+                        <SelectItem value="__loading" disabled>
+                          Chargement...
+                        </SelectItem>
+                      ) : sectorOptions.length === 0 ? (
+                        <SelectItem value="__empty" disabled>
+                          Aucun secteur disponible
+                        </SelectItem>
+                      ) : (
+                        sectorOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {sectorError ? (
+                    <p className="text-xs font-medium text-destructive">{sectorError}</p>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="dda-channel" className="text-sm font-medium text-foreground">
-                {channelSelectLabel}
-              </Label>
-              <Select
-                value={modalChannelValue || undefined}
-                onValueChange={(value) => setModalChannelValue(value)}
-                disabled={!modalSectorValue || channelLoading}
-              >
-                <SelectTrigger
-                  id="dda-channel"
-                  className="rounded-xl border border-border/60 bg-white text-sm font-medium"
-                >
-                  <SelectValue
-                    placeholder={
-                      !modalSectorValue
-                        ? "Choisissez un secteur d'abord"
-                        : channelLoading
-                        ? "Chargement..."
-                        : channelPlaceholder
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {channelLoading ? (
-                    <SelectItem value="__loading" disabled>
-                      Chargement...
-                    </SelectItem>
-                  ) : channelOptions.length === 0 ? (
-                    <SelectItem value="__empty" disabled>
-                      {modalSectorValue
-                        ? "Aucune option disponible"
-                        : "Sélectionnez d'abord un secteur"}
-                    </SelectItem>
-                  ) : (
-                    channelOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {channelError ? (
-                <p className="text-xs font-medium text-destructive">{channelError}</p>
+
+              {needsChannelSelection ? (
+                <div className="space-y-2">
+                  <Label htmlFor="dda-channel" className="text-sm font-medium text-foreground">
+                    {channelSelectLabel}
+                  </Label>
+                  <Select
+                    value={modalChannelValue || undefined}
+                    onValueChange={(value) => setModalChannelValue(value)}
+                    disabled={!modalSectorValue.trim() || channelLoading}
+                  >
+                    <SelectTrigger
+                      id="dda-channel"
+                      className="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                    >
+                      <SelectValue
+                        placeholder={
+                          !modalSectorValue.trim()
+                            ? "Choisissez un secteur d'abord"
+                            : channelLoading
+                            ? "Chargement..."
+                            : channelPlaceholder
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {channelLoading ? (
+                        <SelectItem value="__loading" disabled>
+                          Chargement...
+                        </SelectItem>
+                      ) : channelOptions.length === 0 ? (
+                        <SelectItem value="__empty" disabled>
+                          {modalSectorValue
+                            ? "Aucune option disponible"
+                            : "Sélectionnez d'abord un secteur"}
+                        </SelectItem>
+                      ) : (
+                        channelOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {channelError ? (
+                    <p className="text-xs font-medium text-destructive">{channelError}</p>
+                  ) : null}
+                </div>
               ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground">
-                Période analysée
-              </Label>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <DatePickerField
-                  id="dda-date-from"
-                  placeholder="JJ/MM/AAAA"
-                  date={modalFromDate}
-                  onChange={setModalFromDate}
-                  normalizeDate={normalizeDate}
-                />
-                <DatePickerField
-                  id="dda-date-to"
-                  placeholder="JJ/MM/AAAA"
-                  date={modalToDate}
-                  onChange={setModalToDate}
-                  normalizeDate={normalizeDate}
-                />
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-foreground">
+                  Période analysée
+                </Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <DatePickerField
+                    id="dda-date-from"
+                    placeholder="JJ/MM/AAAA"
+                    date={modalFromDate}
+                    onChange={setModalFromDate}
+                    normalizeDate={normalizeDate}
+                  />
+                  <DatePickerField
+                    id="dda-date-to"
+                    placeholder="JJ/MM/AAAA"
+                    date={modalToDate}
+                    onChange={setModalToDate}
+                    normalizeDate={normalizeDate}
+                  />
+                </div>
+                {!modalFromDate || !modalToDate ? (
+                  <p className="text-xs text-muted-foreground">
+                    Sélectionnez un intervalle de dates complet.
+                  </p>
+                ) : null}
               </div>
-              {!modalFromDate || !modalToDate ? (
-                <p className="text-xs text-muted-foreground">
-                  Sélectionnez un intervalle de dates complet.
-                </p>
-              ) : null}
             </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setFilterDialogOpen(false)}
-            >
-              Annuler
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleResetFilters}
-            >
-              Revenir au workspace
-            </Button>
-            <Button
-              type="button"
-              onClick={handleApplyFilters}
-              disabled={
-                !modalSectorValue ||
-                !modalChannelValue ||
-                channelLoading ||
-                !modalFromDate ||
-                !modalToDate
-              }
-              className="bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
-            >
-              Appliquer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setFilterDialogOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleResetFilters}
+              >
+                Revenir au workspace
+              </Button>
+              <Button
+                type="button"
+                onClick={handleApplyFilters}
+                disabled={
+                  (needsChannelSelection &&
+                    (!modalSectorValue.trim() ||
+                      !modalChannelValue.trim() ||
+                      channelLoading)) ||
+                  !modalFromDate ||
+                  !modalToDate
+                }
+                className="bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
+              >
+                Appliquer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
       {productCode === "metv" ? (
         <MetvDashboard
           ddaData={ddaData}
           channelIdentifier={channelIdentifier}
           sectorIdentifier={sectorIdentifier}
+        />
+      ) : productCode === "mep" ? (
+        <MepDashboard
+          data={mepData}
+          annonceurIdentifier={channelIdentifier || "—"}
+          sectorIdentifier={sectorIdentifier || "—"}
+        />
+      ) : productCode === "mem" ? (
+        <MemDashboard
+          data={memData}
         />
       ) : (
         <ComingSoonDashboard productName={activeProduct?.name ?? null} />

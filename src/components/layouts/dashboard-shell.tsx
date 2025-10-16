@@ -1,4 +1,4 @@
-import { type ReactNode } from "react"
+import { type ReactNode, useMemo } from "react"
 import { BarChart3, FileBarChart, LayoutDashboard, Settings, LogOut } from "lucide-react"
 import { useLocation, useNavigate } from "react-router-dom"
 
@@ -6,23 +6,42 @@ import { Button } from "@/components/ui/button"
 import { clearSelectedWorkspace, getStoredWorkspace } from "@/lib/workspaces"
 import { buildPath, paths } from "@/routes/paths"
 import { useAuth } from "@/hooks/use-auth"
+import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown"
 import LogoVDM from "@/assets/images/logo-vdm.png"
-
-const navItems = [
-  { icon: LayoutDashboard, label: "Vue d’ensemble", path: paths.dashboard },
-  { icon: FileBarChart, label: "Rapports", path: paths.reports },
-  { icon: BarChart3, label: "Simulation", path: paths.simulation },
-  { icon: Settings, label: "Paramètre", path: paths.settings },
-]
 
 interface DashboardShellProps {
   children: ReactNode
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
-  const { logout } = useAuth()
+  const { logout, tokens } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const { selectedWorkspace } = useWorkspaceDropdown({ accessToken: tokens?.access })
+  const storedWorkspace = getStoredWorkspace().workspace
+  const currentWorkspace = selectedWorkspace ?? storedWorkspace ?? null
+
+  const hasMepProduct = useMemo(() => {
+    const products = currentWorkspace?.products_details ?? []
+    return products.some((product) => {
+      const code = product?.code
+      return typeof code === "string" && code.trim().toLowerCase() === "mep"
+    })
+  }, [currentWorkspace?.products_details])
+
+  const navigationItems = useMemo(() => {
+    const items = [
+      { icon: LayoutDashboard, label: "Vue d’ensemble", path: paths.dashboard },
+      { icon: FileBarChart, label: "Rapports", path: paths.reports },
+    ]
+
+    if (hasMepProduct) {
+      items.push({ icon: BarChart3, label: "Simulation", path: paths.simulation })
+    }
+
+    items.push({ icon: Settings, label: "Paramètre", path: paths.settings })
+    return items
+  }, [hasMepProduct])
 
   const activePath = location.pathname
 
@@ -38,7 +57,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <div className="space-y-10">
           <img src={LogoVDM} alt="VDM" className="h-24 w-auto" />
           <nav className="space-y-2">
-            {navItems.map((item) => {
+            {navigationItems.map((item) => {
               const isActive =
                 item.path === paths.dashboard
                   ? activePath.startsWith(paths.dashboard)
