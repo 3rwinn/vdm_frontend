@@ -26,6 +26,7 @@ interface AuthContextValue {
   register: (payload: RegisterPayload) => Promise<void>
   requestCode: (email: string) => Promise<void>
   verifyCode: (payload: VerifyPayload) => Promise<VerifyResponse>
+  authenticate: (payload: VerifyResponse) => void
   logout: () => void
   setPendingEmail: (email: string | null) => void
 }
@@ -105,6 +106,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setPendingEmail(null)
   }, [setPendingEmail])
 
+  const authenticate = useCallback(
+    (payload: VerifyResponse) => {
+      setTokens(payload)
+      setPendingEmail(null)
+    },
+    [setPendingEmail]
+  )
+
   const value = useMemo<AuthContextValue>(() => ({
     tokens,
     user: tokens?.user_data ?? null,
@@ -113,9 +122,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     register,
     requestCode,
     verifyCode,
+    authenticate,
     logout,
     setPendingEmail,
-  }), [tokens, pendingEmail, register, requestCode, verifyCode, logout, setPendingEmail])
+  }), [tokens, pendingEmail, register, requestCode, verifyCode, authenticate, logout, setPendingEmail])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

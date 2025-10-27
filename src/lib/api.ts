@@ -99,6 +99,28 @@ export interface WorkspaceMemberResponse {
   last_name: string;
 }
 
+export interface InvitationUserSummary {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface WorkspaceInvitationResponse {
+  id: number;
+  email: string;
+  role: string;
+  status: string;
+  token: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  cancelled_at: string | null;
+  invited_by: InvitationUserSummary | null;
+}
+
 export interface WorkspaceResponse {
   id: number;
   name: string;
@@ -111,6 +133,7 @@ export interface WorkspaceResponse {
     last_name: string;
   } | null;
   members: WorkspaceMemberResponse[];
+  invitations: WorkspaceInvitationResponse[];
   products: unknown[];
   products_details: ProductResponse[];
   type_client: string | null;
@@ -154,6 +177,103 @@ export function deleteWorkspace(workspaceId: number, token: string) {
     method: "DELETE",
     parseJson: false,
     token,
+  });
+}
+
+export interface WorkspaceMemberPayload {
+  email: string;
+  role: string;
+}
+
+export function inviteWorkspaceMember(
+  workspaceId: number,
+  payload: WorkspaceMemberPayload,
+  token: string
+) {
+  return request<WorkspaceMemberResponse | WorkspaceInvitationResponse>(
+    `/workspaces/${workspaceId}/invitations/`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+      token,
+    }
+  );
+}
+
+export function resendWorkspaceInvitation(
+  workspaceId: number,
+  invitationId: number,
+  token: string
+) {
+  return request<WorkspaceInvitationResponse>(
+    `/workspaces/${workspaceId}/invitations/${invitationId}/resend/`,
+    {
+      method: "POST",
+      token,
+    }
+  );
+}
+
+export function cancelWorkspaceInvitation(
+  workspaceId: number,
+  invitationId: number,
+  token: string
+) {
+  return request<WorkspaceInvitationResponse>(
+    `/workspaces/${workspaceId}/invitations/${invitationId}/cancel/`,
+    {
+      method: "POST",
+      token,
+    }
+  );
+}
+
+export function removeWorkspaceMember(
+  workspaceId: number,
+  memberId: number,
+  token: string
+) {
+  return request<void>(`/workspaces/${workspaceId}/members/${memberId}/`, {
+    method: "DELETE",
+    parseJson: false,
+    token,
+  });
+}
+
+export interface InvitationDetailResponse extends WorkspaceInvitationResponse {
+  workspace: {
+    id: number;
+    name: string;
+  };
+}
+
+export function fetchInvitationDetail(token: string) {
+  return request<InvitationDetailResponse>(`/invitations/${token}/`);
+}
+
+export interface AcceptInvitationPayload {
+  first_name: string;
+  last_name: string;
+  password: string;
+}
+
+export interface AcceptInvitationResponse {
+  message: string;
+  workspace_id: number;
+  access: string;
+  refresh: string;
+  user: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
+}
+
+export function acceptInvitation(token: string, payload: AcceptInvitationPayload) {
+  return request<AcceptInvitationResponse>(`/invitations/${token}/accept/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

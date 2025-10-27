@@ -71,6 +71,13 @@ export function useWorkspaceDropdown({
       persistSelectedWorkspace(workspace)
       rememberWorkspaceId(workspace.id)
       setSelectedWorkspace(workspace)
+      setWorkspaces((previous) => {
+        const exists = previous.find((item) => item.id === workspace.id)
+        if (exists) {
+          return previous.map((item) => (item.id === workspace.id ? workspace : item))
+        }
+        return previous
+      })
     } else {
       clearSelectedWorkspace()
       setSelectedWorkspace(null)

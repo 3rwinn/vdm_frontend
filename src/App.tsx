@@ -10,6 +10,7 @@ import { SettingsPage } from "@/pages/settings-page"
 import { SimulationPage } from "@/pages/simulation-page"
 import { VerifyCodePage } from "@/pages/verify-code-page"
 import { WorkspacesPage } from "@/pages/workspaces/workspaces-page"
+import { InvitationAcceptPage } from "@/pages/invitation-accept-page"
 import { paths, routePatterns } from "@/routes/paths"
 import "./App.css"
 
@@ -23,6 +24,8 @@ function App() {
           <Route path={paths.verify} element={<VerifyCodePage />} />
         </Route>
       </Route>
+
+      <Route path={routePatterns.invitation} element={<InvitationAcceptPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route path={paths.workspaces} element={<WorkspacesPage />} />
