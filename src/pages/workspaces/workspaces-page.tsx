@@ -8,6 +8,7 @@ import { SelectField } from "@/components/forms/select-field";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { usePaystack } from "@/hooks/use-paystack";
 import {
   createWorkspace,
   fetchProducts,
@@ -22,10 +23,21 @@ import { persistSelectedWorkspace } from "@/lib/workspaces";
 import { buildPath } from "@/routes/paths";
 import { toast } from "sonner";
 
-import Logo from "@/assets/images/logo-vdm.png";
+import Logo from "@/assets/images/logo-vdm-white.png";
 import MonthlyIcon from "@/assets/images/pricing-monthly.png";
 import QuarterlyIcon from "@/assets/images/pricing-semester.png";
 import AnnualIcon from "@/assets/images/pricing-annual.png";
+import VdmMetvImage from "@/assets/images/vdm-metv-ico.png";
+import VdmMepImage from "@/assets/images/vdm-mep-ico.png";
+import VdmMemImage from "@/assets/images/vdm-mem-ico.png";
+import VdmMerImage from "@/assets/images/vdm-mer-ico.png";
+
+const productBackgrounds: Record<string, string> = {
+  metv: VdmMetvImage,
+  mep: VdmMepImage,
+  mem: VdmMemImage,
+  mer: VdmMerImage,
+};
 
 const heroContent = {
   title: "L’impact en données des médias révélés par les stats",
@@ -116,6 +128,7 @@ type WorkspaceFormValues = {
   channel: string;
   name: string;
   plan: string;
+  paystackReference: string;
 };
 
 const initialFormValues: WorkspaceFormValues = {
@@ -125,6 +138,7 @@ const initialFormValues: WorkspaceFormValues = {
   channel: "",
   name: "",
   plan: "",
+  paystackReference: "",
 };
 
 function validateStep(values: WorkspaceFormValues, stepIndex: number) {
@@ -152,6 +166,9 @@ function validateStep(values: WorkspaceFormValues, stepIndex: number) {
     if (!values.plan.trim()) {
       errors.plan = "Choisissez un type d’abonnement.";
     }
+    if (!values.paystackReference.trim()) {
+      errors.paystackReference = "Le paiement doit être confirmé par Paystack.";
+    }
   }
   return errors;
 }
@@ -164,23 +181,34 @@ export function WorkspacesPage() {
   const [products, setProducts] = useState<ProductResponse[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
-  const [sectors, setSectors] = useState<Array<{ value: string; label: string }>>([]);
+  const [sectors, setSectors] = useState<
+    Array<{ value: string; label: string }>
+  >([]);
   const [sectorsLoading, setSectorsLoading] = useState(false);
   const [sectorsError, setSectorsError] = useState<string | null>(null);
-  const [chains, setChains] = useState<Array<{ value: string; label: string }>>([]);
+  const [chains, setChains] = useState<Array<{ value: string; label: string }>>(
+    []
+  );
   const [chainsLoading, setChainsLoading] = useState(false);
   const [chainsError, setChainsError] = useState<string | null>(null);
-  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>([]);
+  const [brands, setBrands] = useState<Array<{ value: string; label: string }>>(
+    []
+  );
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [brandsError, setBrandsError] = useState<string | null>(null);
-  const [selectedProductCode, setSelectedProductCode] = useState<string | null>(null);
-  const [selectedSector, setSelectedSector] = useState<string>('');
+  const [selectedProductCode, setSelectedProductCode] = useState<string | null>(
+    null
+  );
+  const [selectedSector, setSelectedSector] = useState<string>("");
   const [workspaces, setWorkspaces] = useState<WorkspaceResponse[]>([]);
   const [workspacesLoading, setWorkspacesLoading] = useState<boolean>(true);
   const [workspacesError, setWorkspacesError] = useState<string | null>(null);
 
   const accessToken = useMemo(() => tokens?.access ?? "", [tokens?.access]);
   const availableProducts = products;
+  const { startTransaction, isConfigured: isPaystackConfigured } =
+    usePaystack();
+  const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -206,93 +234,104 @@ export function WorkspacesPage() {
 
   useEffect(() => {
     if (!tokens?.access) {
-      setSectors([])
-      return
+      setSectors([]);
+      return;
     }
 
-    let active = true
-    setSectorsLoading(true)
-    setSectorsError(null)
+    let active = true;
+    setSectorsLoading(true);
+    setSectorsError(null);
     fetchSectors(tokens.access)
       .then((response) => {
-        if (!active) return
+        if (!active) return;
         const options = (response.sectors ?? []).map((sector) => ({
           value: sector,
           label: sector.charAt(0).toUpperCase() + sector.slice(1).toLowerCase(),
-        }))
-        setSectors(options)
+        }));
+        setSectors(options);
       })
       .catch((error) => {
-        if (!active) return
-        setSectorsError(error instanceof Error ? error.message : "Impossible de charger les secteurs")
+        if (!active) return;
+        setSectorsError(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les secteurs"
+        );
       })
       .finally(() => {
-        if (!active) return
-        setSectorsLoading(false)
-      })
+        if (!active) return;
+        setSectorsLoading(false);
+      });
 
     return () => {
-      active = false
-    }
-  }, [tokens?.access])
+      active = false;
+    };
+  }, [tokens?.access]);
 
   const loadChainsForSector = useCallback(
     async (sector: string) => {
       if (!tokens?.access || !sector) {
-        setChains([])
-        return
+        setChains([]);
+        return;
       }
 
-      setChainsLoading(true)
-      setChainsError(null)
+      setChainsLoading(true);
+      setChainsError(null);
       try {
-        const response = await fetchChainsBySector(sector, tokens.access)
+        const response = await fetchChainsBySector(sector, tokens.access);
         const options = (response.chaines ?? []).map((chain) => ({
           value: chain,
           label: chain,
-        }))
-        setChains(options)
+        }));
+        setChains(options);
       } catch (error) {
-        setChainsError(error instanceof Error ? error.message : "Impossible de charger les chaînes")
-        setChains([])
+        setChainsError(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les chaînes"
+        );
+        setChains([]);
       } finally {
-        setChainsLoading(false)
+        setChainsLoading(false);
       }
     },
     [tokens?.access]
-  )
+  );
 
   const loadBrandsForSector = useCallback(
     async (sector: string) => {
       if (!tokens?.access || !sector) {
-        setBrands([])
-        return
+        setBrands([]);
+        return;
       }
 
-      setBrandsLoading(true)
-      setBrandsError(null)
+      setBrandsLoading(true);
+      setBrandsError(null);
       try {
-        const response = await fetchBrandsBySector(sector, tokens.access)
+        const response = await fetchBrandsBySector(sector, tokens.access);
         const options = (response.marques ?? []).map((brand) => ({
           value: brand,
           label: brand,
-        }))
-        setBrands(options)
+        }));
+        setBrands(options);
       } catch (error) {
-        setBrandsError(error instanceof Error ? error.message : "Impossible de charger les marques")
-        setBrands([])
+        setBrandsError(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger les marques"
+        );
+        setBrands([]);
       } finally {
-        setBrandsLoading(false)
+        setBrandsLoading(false);
       }
     },
     [tokens?.access]
-  )
+  );
 
   useEffect(() => {
     let mounted = true;
 
     if (!accessToken) {
-
       setWorkspaces([]);
       setWorkspacesLoading(false);
       return () => {
@@ -309,7 +348,9 @@ export function WorkspacesPage() {
       })
       .catch((error) => {
         if (!mounted) return;
-        setWorkspacesError(error instanceof Error ? error.message : String(error));
+        setWorkspacesError(
+          error instanceof Error ? error.message : String(error)
+        );
       })
       .finally(() => {
         if (!mounted) return;
@@ -321,47 +362,67 @@ export function WorkspacesPage() {
     };
   }, [accessToken]);
 
-
   const sectorSelectOptions = sectors;
   const chainSelectOptions = chains;
   const brandSelectOptions = brands;
-  const requiresBrandSelect = (selectedProductCode ?? '').toLowerCase() === 'mep'
-  const channelSelectOptions = requiresBrandSelect ? brandSelectOptions : chainSelectOptions
-  const channelLoading = requiresBrandSelect ? brandsLoading : chainsLoading
-  const channelError = requiresBrandSelect ? brandsError : chainsError
-  const channelPlaceholder = requiresBrandSelect ? "Choisissez une marque" : "Choisissez une chaîne"
-  const channelLabel = requiresBrandSelect ? "Produit / Marque" : "Chaîne"
+  const requiresBrandSelect =
+    (selectedProductCode ?? "").toLowerCase() === "mep";
+  const channelSelectOptions = requiresBrandSelect
+    ? brandSelectOptions
+    : chainSelectOptions;
+  const channelLoading = requiresBrandSelect ? brandsLoading : chainsLoading;
+  const channelError = requiresBrandSelect ? brandsError : chainsError;
+  const channelPlaceholder = requiresBrandSelect
+    ? "Choisissez une marque"
+    : "Choisissez une chaîne";
+  const channelLabel = requiresBrandSelect ? "Produit / Marque" : "Chaîne";
 
   useEffect(() => {
     if (!selectedSector) {
-      setChains([])
-      setBrands([])
-      return
+      setChains([]);
+      setBrands([]);
+      return;
     }
 
     if (requiresBrandSelect) {
-      loadBrandsForSector(selectedSector)
-      setChains([])
+      loadBrandsForSector(selectedSector);
+      setChains([]);
     } else {
-      loadChainsForSector(selectedSector)
-      setBrands([])
+      loadChainsForSector(selectedSector);
+      setBrands([]);
     }
-  }, [selectedSector, requiresBrandSelect, loadBrandsForSector, loadChainsForSector])
+  }, [
+    selectedSector,
+    requiresBrandSelect,
+    loadBrandsForSector,
+    loadChainsForSector,
+  ]);
 
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="sticky top-0 hidden h-screen w-full max-w-md flex-col justify-between bg-[#0b7484] p-12 text-white md:flex">
- 
         <div>
-          <img src={Logo} className="h-[173px] w-[246px]" />
+          <img src={Logo} className="h-[173px] w-1auto" />
         </div>
-        <div className="mt-10 space-y-6">
-          <h1 className="text-3xl font-semibold leading-tight">
+        <div className="mt-0 space-y-4">
+          <h1 className="text-2xl font-semibold leading-tight">
             {heroContent.title}
           </h1>
           <p className="text-sm text-white/80">{heroContent.description}</p>
         </div>
-        
+
+        <div className="p-6 bg-[#1FA9B8] rounded-md">
+          <p className="italic">
+            "As a freelancer, finding the right gigs can be challenging, but
+            FreelanceHub made it simple. I love the personalized job
+            recommendations and the ability to showcase my portfolio"
+          </p>
+          <div className="mt-2">
+            <b>John Doe</b>
+            <br />
+            <span>Investisseur</span>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 max-h-screen overflow-y-auto px-6 py-10 md:px-12">
@@ -449,42 +510,72 @@ export function WorkspacesPage() {
                 {workspaces.map((workspace, index) => {
                   const accent = accentPalette[index % accentPalette.length];
                   const productNames =
-                    workspace.products_details?.map((product) => product.name).join(", ") ?? "Produit personnalisé";
+                    workspace.products_details
+                      ?.map((product) => product.name)
+                      .join(", ") ?? "Produit personnalisé";
                   const organisationLabel =
-                    organisationOptions.find((option) => option.value === workspace.type_client)?.label ??
+                    organisationOptions.find(
+                      (option) => option.value === workspace.type_client
+                    )?.label ??
                     workspace.type_client ??
                     "Organisation";
                   const channelLabel = workspace.id_client ?? "";
-                  const planMeta = pricingOptions.find((option) => option.id === workspace.paystack_subscription_plan);
+                  const planMeta = pricingOptions.find(
+                    (option) =>
+                      option.id === workspace.paystack_subscription_plan
+                  );
+                  const productCode = workspace.products_details?.[0]?.code
+                    ? String(workspace.products_details[0].code).trim().toLowerCase()
+                    : null;
+                  const backgroundImage = productCode
+                    ? productBackgrounds[productCode] ?? null
+                    : null;
+
                   return (
                     <button
                       key={workspace.id}
                       type="button"
                       onClick={() => {
-                        persistSelectedWorkspace(workspace)
+                        persistSelectedWorkspace(workspace);
                         navigate(buildPath.dashboard(workspace.id), {
                           state: { workspace },
                         });
                       }}
-                      className="relative overflow-hidden rounded-3xl border border-border/70 bg-white text-left shadow-sm transition hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#026c7a]/40"
+                      className="bg-red-300 relative overflow-hidden rounded-3xl border border-border/70 bg-white text-left shadow-sm transition hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#026c7a]/40"
                     >
-                      <div className={`h-48 w-full bg-gradient-to-br ${accent}`} />
+                      <div className="relative h-68 w-full">
+                        {backgroundImage ? (
+                          <img
+                            src={backgroundImage}
+                            alt="Illustration produit"
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className={`h-full w-full bg-gradient-to-br ${accent}`} />
+                        )}
+                      </div>
                       <span className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-sm font-semibold text-[#026c7a]">
                         {index + 1}
                       </span>
                       <div className="space-y-3 px-5 py-4">
                         <div className="space-y-1.5">
-                          <p className="text-base font-semibold text-foreground">{workspace.name}</p>
+                          <p className="text-base font-semibold text-foreground">
+                            {workspace.name}
+                          </p>
                           <p className="text-xs uppercase tracking-wide text-muted-foreground">
                             {organisationLabel}
                             {channelLabel ? ` • ${channelLabel}` : ""}
                           </p>
                         </div>
                         <div className="space-y-1 text-xs text-muted-foreground">
-                          <p className="font-medium text-foreground">Produit(s) sélectionné(s)</p>
-                          <p>{productNames}</p>
+                          {/* <p className="font-medium text-foreground">
+                            Produit(s) sélectionné(s)
+                          </p> */}
+                          <p className="font-medium text-foreground">{productNames}</p>
                           {planMeta ? (
-                            <p className="text-[#f26a24]">{planMeta.frequency}</p>
+                            <p className="text-[#f26a24]">
+                              {planMeta.frequency}
+                            </p>
                           ) : null}
                         </div>
                         {workspace.is_active ? (
@@ -532,18 +623,25 @@ export function WorkspacesPage() {
                 }
 
                 if (!accessToken) {
-                  toast.error("Impossible de créer l’espace : session expirée.");
+                  toast.error(
+                    "Impossible de créer l’espace : session expirée."
+                  );
                   helpers.setSubmitting(false);
                   return;
                 }
 
+                const productId = Number(values.product);
+                const productsPayload = values.product.trim()
+                  ? [Number.isFinite(productId) ? productId : values.product]
+                  : [];
                 const payload = {
                   name: values.name.trim(),
                   type_client: values.organisationType.trim(),
                   sector_activity: values.sector.trim(),
                   id_client: values.channel.trim(),
-                  paystack_subscription_plan: values.plan.trim(),
-                  products: [values.product],
+                  plan: values.plan.trim(),
+                  paystack_reference: values.paystackReference.trim(),
+                  products: productsPayload,
                 };
 
                 try {
@@ -555,14 +653,19 @@ export function WorkspacesPage() {
                   setChains([]);
                   setBrands([]);
                   setSelectedProductCode(null);
-                  setSelectedSector('');
-                  persistSelectedWorkspace(workspace)
+                  setSelectedSector("");
+                  setProcessingPlanId(null);
+                  persistSelectedWorkspace(workspace);
                   navigate(buildPath.dashboard(workspace.id), {
                     replace: true,
                     state: { workspace },
                   });
                 } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Impossible de créer l’espace.");
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Impossible de créer l’espace."
+                  );
                 } finally {
                   helpers.setSubmitting(false);
                 }
@@ -614,11 +717,11 @@ export function WorkspacesPage() {
                                 key={product.id}
                                 type="button"
                                 onClick={() => {
-                                  setSelectedProductCode(product.code ?? null)
-                                  setChains([])
-                                  setBrands([])
-                                  setFieldValue("product", String(product.id))
-                                  setFieldValue("channel", '', false)
+                                  setSelectedProductCode(product.code ?? null);
+                                  setChains([]);
+                                  setBrands([]);
+                                  setFieldValue("product", String(product.id));
+                                  setFieldValue("channel", "", false);
                                 }}
                                 className={`w-full rounded-2xl border p-5 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-[#60b5c2]/60 ${
                                   isSelected
@@ -628,7 +731,7 @@ export function WorkspacesPage() {
                               >
                                 <div className="flex flex-col gap-4 sm:flex-row">
                                   <div
-                                    className={`hidden h-8 w-8 shrink-0 rounded-md bg-gradient-to-br ${accent} sm:block`}
+                        className="hidden h-8 w-8 shrink-0 rounded-md sm:block"
                                   />
                                   <div className="flex-1 space-y-3">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -698,28 +801,32 @@ export function WorkspacesPage() {
                           options={sectorSelectOptions}
                           disabled={sectorsLoading}
                           onValueChange={(value) => {
-                            setSelectedSector(value)
-                            setFieldValue('channel', '', false)
+                            setSelectedSector(value);
+                            setFieldValue("channel", "", false);
                             if (!value) {
-                              setChains([])
-                              setBrands([])
-                              return
+                              setChains([]);
+                              setBrands([]);
+                              return;
                             }
 
                             if (requiresBrandSelect) {
-                              loadBrandsForSector(value)
-                              setChains([])
+                              loadBrandsForSector(value);
+                              setChains([]);
                             } else {
-                              loadChainsForSector(value)
-                              setBrands([])
+                              loadChainsForSector(value);
+                              setBrands([]);
                             }
                           }}
                         />
                       </div>
                       {sectorsLoading ? (
-                        <p className="text-xs text-muted-foreground">Chargement des secteurs…</p>
+                        <p className="text-xs text-muted-foreground">
+                          Chargement des secteurs…
+                        </p>
                       ) : sectorsError ? (
-                        <p className="text-xs font-medium text-destructive">{sectorsError}</p>
+                        <p className="text-xs font-medium text-destructive">
+                          {sectorsError}
+                        </p>
                       ) : null}
                       <SelectField
                         name="channel"
@@ -729,9 +836,13 @@ export function WorkspacesPage() {
                         disabled={channelLoading || !values.sector}
                       />
                       {channelLoading ? (
-                        <p className="text-xs text-muted-foreground">Chargement en cours…</p>
+                        <p className="text-xs text-muted-foreground">
+                          Chargement en cours…
+                        </p>
                       ) : channelError ? (
-                        <p className="text-xs font-medium text-destructive">{channelError}</p>
+                        <p className="text-xs font-medium text-destructive">
+                          {channelError}
+                        </p>
                       ) : null}
                       <TextField
                         name="name"
@@ -767,41 +878,114 @@ export function WorkspacesPage() {
                               ? QuarterlyIcon
                               : AnnualIcon;
                           const isSelected = values.plan === option.id;
+                          const isProcessing = processingPlanId === option.id;
+
+                          const handlePlanSelection = () => {
+                            if (!selectedProduct) {
+                              toast.error("Sélectionnez d’abord un produit.");
+                              return;
+                            }
+
+                            if (!isPaystackConfigured) {
+                              toast.error("Configuration Paystack manquante.");
+                              return;
+                            }
+
+                            if (!user?.email) {
+                              toast.error(
+                                "Impossible de récupérer votre email pour Paystack."
+                              );
+                              return;
+                            }
+
+                            const amount =
+                              basePrice !== null && !Number.isNaN(basePrice)
+                                ? basePrice * option.multiplier
+                                : option.placeholderPrice;
+                            const amountKobo = Math.round(Number(amount) * 100);
+
+                            setProcessingPlanId(option.id);
+                            setFieldValue("plan", "", false);
+                            setFieldValue("paystackReference", "", false);
+
+                            startTransaction({
+                              email: user.email,
+                              firstName: user.first_name,
+                              lastName: user.last_name,
+                              amountKobo,
+                              currency: "XOF",
+                              metadata: {
+                                workspace_name: values.name || "",
+                                product_id: String(selectedProduct.id),
+                                product_name: selectedProduct.name,
+                                plan: option.id,
+                              },
+                              onSuccess: ({ reference }) => {
+                                toast.success("Paiement Paystack confirmé ✔️");
+                                setProcessingPlanId(null);
+                                setFieldValue("plan", option.id, false);
+                                setFieldTouched("plan", true, false);
+                                setFieldValue(
+                                  "paystackReference",
+                                  reference,
+                                  false
+                                );
+                                setFieldTouched(
+                                  "paystackReference",
+                                  true,
+                                  false
+                                );
+                              },
+                              onCancel: () => {
+                                toast.info("Paiement annulé.");
+                                setProcessingPlanId(null);
+                              },
+                              onError: (error) => {
+                                console.error("Paystack inline error", error);
+                                toast.error(
+                                  error.message ??
+                                    "Paiement Paystack indisponible."
+                                );
+                                setProcessingPlanId(null);
+                              },
+                            });
+                          };
 
                           return (
                             <button
                               key={option.id}
                               type="button"
                               aria-pressed={isSelected}
-                              onClick={() => {
-                                setFieldValue("plan", option.id);
-                                setFieldTouched("plan", true, false);
-                              }}
-                              className={`flex h-full flex-col justify-between rounded-3xl border p-6 text-left shadow-sm transition hover:-translate-y-1 focus:outline-none focus:ring-2 focus:ring-[#f26a24]/40 ${
+                              onClick={handlePlanSelection}
+                              disabled={isProcessing || !values.product}
+                              className={`flex h-full flex-col justify-between rounded-3xl border p-6 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-[#f26a24]/40 ${
                                 isSelected
                                   ? "border-[#f26a24] bg-[#f26a24]/5"
-                                  : "border-border/60 bg-white"
+                                  : "border-border/60 bg-white hover:-translate-y-1"
+                              } ${
+                                isProcessing || !values.product
+                                  ? "cursor-not-allowed opacity-60"
+                                  : ""
                               }`}
                             >
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between">
                                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted">
-                                    <img
+                                  <img
                                       src={optionIcon}
                                       alt={`Illustration ${option.title}`}
                                       className="h-6 w-6"
                                     />
                                   </div>
-                                  {isSelected && (
-                                    <span
-                                      className={`rounded-full border px-2 py-1 text-xs font-medium 
-                                          "border-[#f26a24] bg-[#f26a24]/10 text-[#f26a24]"
-                                      `}
-                                    >
+                                  {isProcessing ? (
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      Paiement en cours…
+                                    </span>
+                                  ) : isSelected ? (
+                                    <span className="rounded-full border border-[#f26a24] bg-[#f26a24]/10 px-2 py-1 text-xs font-medium text-[#f26a24]">
                                       Sélectionné
                                     </span>
-                                  )}
-                                  
+                                  ) : null}
                                 </div>
                                 <div className="space-y-2">
                                   <h3 className="text-lg font-semibold text-[#083349]">
@@ -822,11 +1006,32 @@ export function WorkspacesPage() {
                           );
                         })}
                       </div>
+                      {!isPaystackConfigured ? (
+                        <p className="text-xs font-medium text-destructive">
+                          Clé publique Paystack manquante dans l’environnement.
+                        </p>
+                      ) : null}
                       {errors.plan && touched.plan ? (
                         <p className="text-xs font-medium text-destructive">
                           {errors.plan}
                         </p>
                       ) : null}
+                      {errors.paystackReference &&
+                      (touched.paystackReference || touched.plan) ? (
+                        <p className="text-xs font-medium text-destructive">
+                          {errors.paystackReference}
+                        </p>
+                      ) : null}
+                      {values.paystackReference ? (
+                        <p className="text-xs font-medium text-emerald-600">
+                          Référence Paystack : {values.paystackReference}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Un paiement Paystack validé est requis pour activer
+                          l’abonnement.
+                        </p>
+                      )}
                     </div>
                   ) : null}
 
@@ -848,7 +1053,8 @@ export function WorkspacesPage() {
                       disabled={
                         isSubmitting ||
                         (stepIndex === creationSteps.length - 1 &&
-                          !values.plan.trim())
+                          (!values.plan.trim() ||
+                            !values.paystackReference.trim()))
                       }
                     >
                       {stepIndex === creationSteps.length - 1

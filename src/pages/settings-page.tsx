@@ -440,7 +440,7 @@ export function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-8">
-        <TabsList className="inline-flex h-auto gap-2 rounded-2xl bg-muted/30 p-1.5 backdrop-blur-sm">
+        <TabsList className="inline-flex h-auto gap-2 rounded-2xl bg-white p-1.5 backdrop-blur-sm">
           <TabsTrigger
             value="profile"
             className="rounded-xl px-6 py-3 text-sm font-medium transition-all data-[state=active]:bg-[#0c6e85] data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-[#0c6e85]/20"
@@ -521,26 +521,33 @@ export function SettingsPage() {
             </form>
           </Card>
 
-          <Card className="border-none bg-white shadow-lg">
-            <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <CardTitle>Notifications</CardTitle>
-                <CardDescription>
-                  Vos alertes et informations importantes récemment reçues.
-                </CardDescription>
+          <Card className="overflow-hidden border border-border/50 bg-white shadow-xl pt-0">
+            <CardHeader className="border-b border-border/50 bg-gradient-to-r from-[#0c6e85]/5 to-transparent pb-6 pt-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
+                    <BellRing className="h-6 w-6 text-[#0c6e85]" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Notifications</CardTitle>
+                    <CardDescription className="mt-1">
+                      Vos alertes et informations importantes récemment reçues
+                    </CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="w-fit border-[#0c6e85]/30 bg-[#0c6e85]/5 text-[#0c6e85] px-3 py-1">
+                  {notificationsMock.length} nouvelles
+                </Badge>
               </div>
-              <Badge variant="outline" className="border-[#0c6e85]/30 text-[#0c6e85]">
-                {notificationsMock.length} nouvelles
-              </Badge>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 p-6">
               {notificationsMock.map((notification) => (
                 <div
                   key={notification.id}
-                  className="rounded-2xl border border-border/60 bg-muted/30 p-4"
+                  className="group rounded-xl border border-border/60 bg-gradient-to-br from-muted/30 to-muted/10 p-4 transition-all hover:border-[#0c6e85]/30 hover:shadow-md"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
+                    <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-2">
                         <Badge
                           variant={
@@ -550,6 +557,7 @@ export function SettingsPage() {
                               ? "success"
                               : "secondary"
                           }
+                          className="text-xs"
                         >
                           {notification.type === "warning"
                             ? "Alerte"
@@ -568,7 +576,9 @@ export function SettingsPage() {
                         {notification.description}
                       </p>
                     </div>
-                    <BellRing className="h-5 w-5 text-[#0c6e85]" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0c6e85]/10 transition-all group-hover:bg-[#0c6e85]/20">
+                      <BellRing className="h-5 w-5 text-[#0c6e85]" />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -576,62 +586,76 @@ export function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="workspace" className="space-y-6">
+        <TabsContent value="workspace" className="space-y-8">
           {!selectedWorkspace ? (
-            <Card className="border-none bg-white shadow-lg">
-              <CardHeader>
-                <CardTitle>Aucun workspace actif</CardTitle>
-                <CardDescription>
-                  Sélectionnez un workspace pour accéder aux informations détaillées et gérer les membres.
-                </CardDescription>
+            <Card className="overflow-hidden border border-border/50 bg-white shadow-xl">
+              <CardHeader className="border-b border-border/50 bg-gradient-to-r from-[#0c6e85]/5 to-transparent pb-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
+                    <Building2 className="h-6 w-6 text-[#0c6e85]" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl">Aucun workspace actif</CardTitle>
+                    <CardDescription className="mt-1">
+                      Sélectionnez un workspace pour accéder aux informations détaillées et gérer les membres
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
             </Card>
           ) : (
             <>
-              <Card className="border-none bg-white shadow-lg">
-                <CardHeader className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-2xl font-semibold text-foreground">
-                      {selectedWorkspace.name}
-                    </CardTitle>
-                    <CardDescription>
-                      Type : {selectedWorkspace.type_client ?? "—"} · Produit(s) :
-                      {" "}
-                      {selectedWorkspace.products_details?.map((product) => product.name).join(", ") ?? "—"}
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant="outline" className="border-[#0c6e85]/30 text-[#0c6e85]">
-                      {selectedWorkspace.paystack_subscription_status ?? "Statut inconnu"}
-                    </Badge>
-                    <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10">
-                          <Trash2 className="mr-2 h-4 w-4" /> Supprimer le workspace
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer {selectedWorkspace.name} ?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Cette action est irréversible. Toutes les données associées à ce workspace seront supprimées.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={handleDeleteWorkspace}
-                            className="bg-destructive text-white hover:bg-destructive/90"
-                            disabled={deleting}
-                          >
-                            {deleting ? "Suppression..." : "Supprimer"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+              <Card className="overflow-hidden border border-border/50 bg-white shadow-xl pt-0">
+                <CardHeader className="border-b border-border/50 bg-gradient-to-r from-[#0c6e85]/5 to-transparent pb-6 pt-6">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
+                        <Building2 className="h-6 w-6 text-[#0c6e85]" />
+                      </div>
+                      <div className="space-y-1">
+                        <CardTitle className="text-xl font-semibold text-foreground">
+                          {selectedWorkspace.name}
+                        </CardTitle>
+                        <CardDescription>
+                          Type : {selectedWorkspace.type_client ?? "—"} · Produit(s) :
+                          {" "}
+                          {selectedWorkspace.products_details?.map((product) => product.name).join(", ") ?? "—"}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge variant="outline" className="border-[#0c6e85]/30 bg-[#0c6e85]/5 text-[#0c6e85] px-3 py-1">
+                        {selectedWorkspace.paystack_subscription_status ?? "Statut inconnu"}
+                      </Badge>
+                      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" className="rounded-xl border-destructive/40 text-destructive hover:bg-destructive/10">
+                            <Trash2 className="mr-2 h-4 w-4" /> Supprimer
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-2xl">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Supprimer {selectedWorkspace.name} ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Cette action est irréversible. Toutes les données associées à ce workspace seront supprimées.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="rounded-xl">Annuler</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDeleteWorkspace}
+                              className="rounded-xl bg-destructive text-white hover:bg-destructive/90"
+                              disabled={deleting}
+                            >
+                              {deleting ? "Suppression..." : "Supprimer"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
+                <CardContent className="grid gap-4 p-6 md:grid-cols-2">
                   <InfoTile label="Identifiant client" value={selectedWorkspace.id_client ?? "—"} />
                   <InfoTile
                     label="Abonnement"
@@ -648,81 +672,92 @@ export function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-none bg-white shadow-lg">
-                <CardHeader>
-                  <CardTitle>Gestion des membres</CardTitle>
-                  <CardDescription>
-                    Invitez de nouveaux collaborateurs et ajustez la liste existante.
-                  </CardDescription>
+              <Card className="overflow-hidden border border-border/50 bg-white shadow-xl pt-0">
+                <CardHeader className="border-b border-border/50 bg-gradient-to-r from-[#0c6e85]/5 to-transparent pb-6 pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
+                      <User className="h-6 w-6 text-[#0c6e85]" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">Gestion des membres</CardTitle>
+                      <CardDescription className="mt-1">
+                        Invitez de nouveaux collaborateurs et ajustez la liste existante
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  <form className="grid gap-4 md:grid-cols-[2fr_1fr_auto]" onSubmit={handleInviteMember}>
-                    <div className="space-y-2 md:col-span-1">
-                      <Label htmlFor="member-email">Email du membre</Label>
-                      <Input
-                       className="mt-2"
-                        id="member-email"
-                        type="email"
-                        value={memberForm.email}
-                        onChange={(event) => handleMemberFormChange("email", event.target.value)}
-                        required
-                        placeholder="membre@entreprise.com"
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-1 hidden">
-                      <Label htmlFor="member-role">Rôle</Label>
-                      <Input
-                        id="member-role"
-                        value={memberForm.role}
-                        onChange={(event) => handleMemberFormChange("role", event.target.value)}
-                        required
-                        type="hidden"
-                        placeholder="Ex : analyste"
-                      />
-                    </div>
-                    <div className="flex items-end md:col-span-1">
-                      <Button
-                        type="submit"
-                        className="w-full bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
-                        disabled={inviting}
-                      >
-                        {inviting ? "Envoi..." : "Inviter"}
-                      </Button>
+                <CardContent className="space-y-6 p-6">
+                  <form className="rounded-xl bg-gradient-to-br from-muted/30 to-muted/10 p-4" onSubmit={handleInviteMember}>
+                    <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+                      <div className="space-y-2">
+                        <Label htmlFor="member-email" className="text-sm font-medium">
+                          Email du membre
+                        </Label>
+                        <Input
+                          id="member-email"
+                          type="email"
+                          value={memberForm.email}
+                          onChange={(event) => handleMemberFormChange("email", event.target.value)}
+                          required
+                          placeholder="membre@entreprise.com"
+                          className="rounded-xl mt-2 border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                        />
+                      </div>
+                      <div className="space-y-2 hidden">
+                        <Label htmlFor="member-role">Rôle</Label>
+                        <Input
+                          id="member-role"
+                          value={memberForm.role}
+                          onChange={(event) => handleMemberFormChange("role", event.target.value)}
+                          required
+                          type="hidden"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="submit"
+                          className="h-10 rounded-xl bg-[#0c6e85] px-6 text-white shadow-lg shadow-[#0c6e85]/20 transition-all hover:bg-[#0a5a6c] hover:shadow-xl"
+                          disabled={inviting}
+                        >
+                          {inviting ? "Envoi..." : "Inviter"}
+                        </Button>
+                      </div>
                     </div>
                     {memberError ? (
-                      <p className="md:col-span-3 text-sm font-medium text-destructive">{memberError}</p>
+                      <p className="mt-3 text-sm font-medium text-destructive">{memberError}</p>
                     ) : null}
                   </form>
 
                   {workspaceMembers.length === 0 ? (
-                    <Alert>
-                      <AlertTitle>Aucun membre</AlertTitle>
+                    <Alert className="border-dashed border-[#0c6e85]/30 bg-[#0c6e85]/5">
+                      <User className="h-4 w-4 text-[#0c6e85]" />
+                      <AlertTitle className="text-[#0c6e85]">Aucun membre</AlertTitle>
                       <AlertDescription>
-                        Invitez vos collaborateurs pour collaborer autour des données.
+                        Invitez vos collaborateurs pour collaborer autour des données
                       </AlertDescription>
                     </Alert>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-hidden rounded-xl border border-border/50">
                       <Table>
                         <TableHeader>
-                          <TableRow>
-                            <TableHead>Nom</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Rôle</TableHead>
-                            <TableHead className="w-24 text-right">Actions</TableHead>
+                          <TableRow className="bg-muted/30 hover:bg-muted/30">
+                            <TableHead className="font-semibold">Nom</TableHead>
+                            <TableHead className="font-semibold">Email</TableHead>
+                            <TableHead className="font-semibold">Rôle</TableHead>
+                            <TableHead className="w-24 text-right font-semibold">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {workspaceMembers.map((member) => {
                             const isOwner = member.email.toLowerCase() === selectedWorkspace.owner?.email?.toLowerCase()
                             return (
-                              <TableRow key={member.id}>
+                              <TableRow key={member.id} className="hover:bg-muted/20 transition-colors">
                                 <TableCell className="font-medium">
                                   {member.first_name} {member.last_name}
                                 </TableCell>
-                                <TableCell>{member.email}</TableCell>
+                                <TableCell className="text-muted-foreground">{member.email}</TableCell>
                                 <TableCell>
-                                  <Badge variant="outline" className="border-[#0c6e85]/30 text-[#0c6e85]">
+                                  <Badge variant="outline" className="border-[#0c6e85]/30 bg-[#0c6e85]/5 text-[#0c6e85]">
                                     {translateRole(member.role)}
                                   </Badge>
                                 </TableCell>
@@ -730,7 +765,8 @@ export function SettingsPage() {
                                   <Button
                                     type="button"
                                     variant="ghost"
-                                    className="text-destructive hover:text-destructive/90"
+                                    size="sm"
+                                    className="rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
                                     disabled={isOwner || memberBeingRemoved === member.id}
                                     onClick={() => handleRemoveMember(member.id)}
                                   >
@@ -747,27 +783,40 @@ export function SettingsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-none bg-white shadow-lg">
-                <CardHeader>
-                  <CardTitle>Invitations en attente</CardTitle>
-                  <CardDescription>
-                    Ces membres doivent encore finaliser leur inscription via le lien reçu.
-                  </CardDescription>
+              <Card className="overflow-hidden border border-border/50 bg-white shadow-xl pt-0">
+                <CardHeader className="border-b border-border/50 bg-gradient-to-r from-[#0c6e85]/5 to-transparent pb-6 pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
+                      <BellRing className="h-6 w-6 text-[#0c6e85]" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-xl">Invitations en attente</CardTitle>
+                      <CardDescription className="mt-1">
+                        Ces membres doivent encore finaliser leur inscription via le lien reçu
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-6">
                   {workspaceInvitations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucune invitation en attente.</p>
+                    <Alert className="border-dashed border-[#0c6e85]/30 bg-[#0c6e85]/5">
+                      <BellRing className="h-4 w-4 text-[#0c6e85]" />
+                      <AlertTitle className="text-[#0c6e85]">Aucune invitation en attente</AlertTitle>
+                      <AlertDescription>
+                        Toutes les invitations ont été acceptées ou expirées
+                      </AlertDescription>
+                    </Alert>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="overflow-hidden rounded-xl border border-border/50">
                       <Table>
                         <TableHeader>
-                          <TableRow>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Rôle</TableHead>
-                            <TableHead>Statut</TableHead>
-                            <TableHead>Expire le</TableHead>
-                            <TableHead>Invité·e par</TableHead>
-                            <TableHead className="w-[220px] text-right">Actions</TableHead>
+                          <TableRow className="bg-muted/30 hover:bg-muted/30">
+                            <TableHead className="font-semibold">Email</TableHead>
+                            <TableHead className="font-semibold">Rôle</TableHead>
+                            <TableHead className="font-semibold">Statut</TableHead>
+                            <TableHead className="font-semibold">Expire le</TableHead>
+                            <TableHead className="font-semibold">Invité·e par</TableHead>
+                            <TableHead className="w-[220px] text-right font-semibold">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -779,31 +828,32 @@ export function SettingsPage() {
                               : "—"
 
                             return (
-                              <TableRow key={invitation.id}>
-                                <TableCell>{invitation.email}</TableCell>
+                              <TableRow key={invitation.id} className="hover:bg-muted/20 transition-colors">
+                                <TableCell className="font-medium">{invitation.email}</TableCell>
                                 <TableCell>
-                                  <Badge variant="outline" className="border-[#0c6e85]/30 text-[#0c6e85]">
+                                  <Badge variant="outline" className="border-[#0c6e85]/30 bg-[#0c6e85]/5 text-[#0c6e85]">
                                     {translateRole(invitation.role)}
                                   </Badge>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge variant="secondary" className="bg-[#0c6e85]/10 text-[#0c6e85]">
-                                    En attente d'inscription
+                                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-700 border-amber-500/30">
+                                    En attente
                                   </Badge>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="text-sm text-muted-foreground">
                                   {new Date(invitation.expires_at).toLocaleDateString("fr-FR", {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
                                   })}
                                 </TableCell>
-                                <TableCell>{inviterLabel}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{inviterLabel}</TableCell>
                                 <TableCell className="space-x-2 text-right">
                                   <Button
                                     type="button"
                                     variant="ghost"
-                                    className="text-[#0c6e85] hover:text-[#0a5a6c]"
+                                    size="sm"
+                                    className="rounded-lg text-[#0c6e85] hover:bg-[#0c6e85]/10 hover:text-[#0c6e85]"
                                     disabled={isResending || isCancelling}
                                     onClick={() => handleResendInvitation(invitation.id)}
                                   >
@@ -817,13 +867,14 @@ export function SettingsPage() {
                                       <Button
                                         type="button"
                                         variant="ghost"
-                                        className="text-destructive hover:text-destructive/90"
+                                        size="sm"
+                                        className="rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
                                         disabled={isCancelling}
                                       >
                                         Annuler
                                       </Button>
                                     </AlertDialogTrigger>
-                                    <AlertDialogContent>
+                                    <AlertDialogContent className="rounded-2xl">
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Annuler cette invitation ?</AlertDialogTitle>
                                         <AlertDialogDescription>
@@ -831,8 +882,14 @@ export function SettingsPage() {
                                         </AlertDialogDescription>
                                       </AlertDialogHeader>
                                       <AlertDialogFooter>
-                                        <AlertDialogCancel disabled={isCancelling}>Retour</AlertDialogCancel>
-                                        <AlertDialogAction onClick={handleCancelInvitation} disabled={isCancelling}>
+                                        <AlertDialogCancel disabled={isCancelling} className="rounded-xl">
+                                          Retour
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={handleCancelInvitation}
+                                          disabled={isCancelling}
+                                          className="rounded-xl bg-destructive text-white hover:bg-destructive/90"
+                                        >
                                           {isCancelling ? "Annulation..." : "Confirmer"}
                                         </AlertDialogAction>
                                       </AlertDialogFooter>
@@ -858,9 +915,12 @@ export function SettingsPage() {
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-muted/20 p-4">
-      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold text-foreground">{value}</p>
+    <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-muted/30 to-muted/10 p-5 transition-all hover:border-[#0c6e85]/30 hover:shadow-md">
+      <div className="absolute right-0 top-0 h-20 w-20 rounded-full bg-[#0c6e85]/5 blur-2xl transition-all group-hover:bg-[#0c6e85]/10"></div>
+      <div className="relative">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-2 text-xl font-bold text-foreground">{value}</p>
+      </div>
     </div>
   )
 }

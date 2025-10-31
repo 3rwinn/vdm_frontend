@@ -151,7 +151,8 @@ export interface CreateWorkspacePayload {
   type_client: string;
   sector_activity: string;
   id_client: string;
-  paystack_subscription_plan: string;
+  plan: string;
+  paystack_reference: string;
   products: Array<number | string | Record<string, unknown>>;
 }
 
