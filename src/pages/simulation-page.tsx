@@ -120,6 +120,16 @@ const spotsChartConfig = {
   },
 }
 
+function formatNumberInput(value: string): string {
+  const digits = value.replace(/\D/g, "")
+  if (!digits) return ""
+  return Number(digits).toLocaleString("fr-FR")
+}
+
+function parseFormattedNumber(value: string): string {
+  return value.replace(/\s/g, "").replace(/\u00A0/g, "")
+}
+
 export function SimulationPage() {
   const navigate = useNavigate()
   const { tokens, logout } = useAuth()
@@ -153,7 +163,7 @@ export function SimulationPage() {
 
   const [formState, setFormState] = useState<FormState>({
     advertiser: selectedWorkspace?.id_client ?? "",
-    investmentAmount: "20000000",
+    investmentAmount: formatNumberInput("20000000"),
     advertisementDuration: "30",
     startDate: defaultStart,
     endDate: today,
@@ -174,6 +184,7 @@ export function SimulationPage() {
   const [loadingSimulation, setLoadingSimulation] = useState(false)
   const [simulationResult, setSimulationResult] = useState<SimulationRecommendations | null>(null)
   const [simulationError, setSimulationError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const handleInputChange = useCallback(
     (field: keyof FormState, value: string | Date | undefined) => {
@@ -209,30 +220,36 @@ export function SimulationPage() {
         return
       }
 
+      const errors: Record<string, string> = {}
+
       if (!formState.advertiser.trim()) {
-        toast.error("Renseignez l’annonceur à simuler.")
-        return
+        errors.advertiser = "Annonceur requis."
       }
 
-      if (!formState.startDate || !formState.endDate) {
-        toast.error("Sélectionnez une période complète.")
-        return
-      }
-
-      if (formState.startDate > formState.endDate) {
-        toast.error("La date de fin doit être postérieure à la date de début.")
-        return
-      }
-
-      const investmentAmount = Number(formState.investmentAmount)
+      const investmentAmount = Number(parseFormattedNumber(formState.investmentAmount))
       if (!Number.isFinite(investmentAmount) || investmentAmount <= 0) {
-        toast.error("Indiquez un montant d’investissement valide.")
-        return
+        errors.investmentAmount = "Montant d’investissement invalide."
       }
 
       const advertisementDuration = Number(formState.advertisementDuration)
       if (!Number.isFinite(advertisementDuration) || advertisementDuration <= 0) {
-        toast.error("Indiquez une durée de spot valide (en secondes).")
+        errors.advertisementDuration = "Durée de spot invalide."
+      }
+
+      if (!formState.startDate) {
+        errors.startDate = "Date de début requise."
+      }
+
+      if (!formState.endDate) {
+        errors.endDate = "Date de fin requise."
+      }
+
+      if (formState.startDate && formState.endDate && formState.startDate > formState.endDate) {
+        errors.endDate = "La date de fin doit être postérieure au début."
+      }
+
+      setFieldErrors(errors)
+      if (Object.keys(errors).length > 0) {
         return
       }
 
@@ -424,11 +441,18 @@ export function SimulationPage() {
                   <Label htmlFor="investmentAmount">Budget disponible (FCFA)</Label>
                   <Input
                     id="investmentAmount"
-                    type="number"
-                    min={0}
+                    type="text"
+                    inputMode="numeric"
                     value={formState.investmentAmount}
-                    onChange={(event) => handleInputChange("investmentAmount", event.target.value)}
+                    onChange={(event) => {
+                      handleInputChange("investmentAmount", formatNumberInput(event.target.value))
+                      setFieldErrors((prev) => { const { investmentAmount: _, ...rest } = prev; return rest })
+                    }}
+                    className={fieldErrors.investmentAmount ? "border-destructive" : ""}
                   />
+                  {fieldErrors.investmentAmount && (
+                    <p className="text-xs font-medium text-destructive">{fieldErrors.investmentAmount}</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="advertisementDuration">Durée d’un spot (secondes)</Label>
@@ -457,8 +481,14 @@ export function SimulationPage() {
                     id="period-start"
                     placeholder="JJ/MM/AAAA"
                     date={formState.startDate}
-                    onChange={(date) => handleInputChange("startDate", date)}
+                    onChange={(date) => {
+                      handleInputChange("startDate", date)
+                      setFieldErrors((prev) => { const { startDate: _, ...rest } = prev; return rest })
+                    }}
                   />
+                  {fieldErrors.startDate && (
+                    <p className="text-xs font-medium text-destructive">{fieldErrors.startDate}</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Période - fin</Label>
@@ -466,8 +496,14 @@ export function SimulationPage() {
                     id="period-end"
                     placeholder="JJ/MM/AAAA"
                     date={formState.endDate}
-                    onChange={(date) => handleInputChange("endDate", date)}
+                    onChange={(date) => {
+                      handleInputChange("endDate", date)
+                      setFieldErrors((prev) => { const { endDate: _, ...rest } = prev; return rest })
+                    }}
                   />
+                  {fieldErrors.endDate && (
+                    <p className="text-xs font-medium text-destructive">{fieldErrors.endDate}</p>
+                  )}
                 </div>
               </div>
 

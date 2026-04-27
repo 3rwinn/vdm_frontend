@@ -31,7 +31,7 @@ export function RegisterPage() {
     if (!values.email.trim()) {
       errors.email = "Adresse email requise."
     } else {
-      const emailRegex = /.+@.+\..+/i
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
       if (!emailRegex.test(values.email)) {
         errors.email = "Adresse email invalide."
       }

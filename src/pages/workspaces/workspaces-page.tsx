@@ -363,7 +363,23 @@ export function WorkspacesPage() {
   }, [accessToken]);
 
   const sectorSelectOptions = sectors;
-  const chainSelectOptions = chains;
+  const chainSelectOptions = useMemo(() => {
+    const currentProduct = (selectedProductCode ?? "").toLowerCase();
+
+    if (!chains.length) {
+      return chains;
+    }
+
+    if (currentProduct === "mer") {
+      return chains.filter((option) => option.label.toLowerCase().includes("radio"));
+    }
+
+    if (currentProduct === "metv") {
+      return chains.filter((option) => !option.label.toLowerCase().includes("radio"));
+    }
+
+    return chains;
+  }, [chains, selectedProductCode]);
   const brandSelectOptions = brands;
   const requiresBrandSelect =
     (selectedProductCode ?? "").toLowerCase() === "mep";
@@ -376,6 +392,26 @@ export function WorkspacesPage() {
     ? "Choisissez une marque"
     : "Choisissez une chaîne";
   const channelLabel = requiresBrandSelect ? "Produit / Marque" : "Chaîne";
+
+  const organisationSelectOptions = useMemo(() => {
+    const currentProduct = (selectedProductCode ?? "").toLowerCase();
+
+    if (currentProduct === "mer") {
+      return organisationOptions.filter((option) => option.value !== "tv");
+    }
+
+    if (currentProduct === "metv") {
+      return organisationOptions.filter((option) => option.value !== "radio");
+    }
+
+    if (currentProduct === "mep") {
+      return organisationOptions.filter(
+        (option) => option.value !== "tv" && option.value !== "radio"
+      );
+    }
+
+    return organisationOptions;
+  }, [selectedProductCode]);
 
   useEffect(() => {
     if (!selectedSector) {
@@ -788,12 +824,12 @@ export function WorkspacesPage() {
                   {stepIndex === 1 ? (
                     <div className="space-y-4">
                       <div className="grid gap-4 sm:grid-cols-2">
-                        <SelectField
-                          name="organisationType"
-                          label="Vous êtes un"
-                          placeholder="Sélectionnez un type"
-                          options={organisationOptions}
-                        />
+                          <SelectField
+                            name="organisationType"
+                            label="Vous êtes un"
+                            placeholder="Sélectionnez un type"
+                            options={organisationSelectOptions}
+                          />
                         <SelectField
                           name="sector"
                           label="Secteur d’activité"

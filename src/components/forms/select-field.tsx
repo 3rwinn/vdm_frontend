@@ -56,7 +56,6 @@ export function SelectField({
   };
 
   const chunks = options.length > 5 ? splitArrayIntoChunks(options, 5) : [options];
-  console.log("let's see chunks", chunks);
 
   return (
     <div className={cn("space-y-2.5", containerClassName)}>

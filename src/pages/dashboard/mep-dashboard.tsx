@@ -332,7 +332,7 @@ export function MepDashboard({
           metric={normalizeDuration(analysis.annonceur.duree_commerciale)}
           gradient
           trendValue={percentageSpots}
-          trendDescription={`par rapport à la concurrence, soit ${analysis.annonceur.nb_spots} contre ${analysis.concurrence.nb_spots} spots.`}
+          trendDescription={`par rapport à la concurrence, soit ${analysis.annonceur.nb_spots.toLocaleString("fr-FR")} contre ${analysis.concurrence.nb_spots.toLocaleString("fr-FR")} spots.`}
         />
 
         <LightStatCard

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Settings, User, BellRing, Building2, Trash2 } from "lucide-react"
+import { Settings, User, BellRing, Building2, Trash2, Check, Loader2, RotateCcw } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 
 import { DashboardShell } from "@/components/layouts/dashboard-shell"
@@ -54,6 +54,8 @@ import {
   inviteWorkspaceMember,
   removeWorkspaceMember,
   resendWorkspaceInvitation,
+  updateProfile,
+  updateWorkspace,
   type WorkspaceInvitationResponse,
   type WorkspaceMemberResponse,
 } from "@/lib/api"
@@ -125,6 +127,16 @@ export function SettingsPage() {
   const [resendingInvitationId, setResendingInvitationId] = useState<number | null>(null)
   const [cancellingInvitationId, setCancellingInvitationId] = useState<number | null>(null)
   const [cancelDialogId, setCancelDialogId] = useState<number | null>(null)
+  const [workspaceName, setWorkspaceName] = useState(selectedWorkspace?.name ?? "")
+  const [isSavingWorkspace, setIsSavingWorkspace] = useState(false)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [profileTouched, setProfileTouched] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (selectedWorkspace) {
+      setWorkspaceName(selectedWorkspace.name ?? "")
+    }
+  }, [selectedWorkspace])
 
   const updateSelectedWorkspace = useCallback(
     (
@@ -153,6 +165,17 @@ export function SettingsPage() {
   const handleInviteMember = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!selectedWorkspace || !tokens?.access) {
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+    const trimmedEmail = memberForm.email.trim()
+    if (!trimmedEmail) {
+      setMemberError("Adresse email requise.")
+      return
+    }
+    if (!emailRegex.test(trimmedEmail)) {
+      setMemberError("Adresse email invalide.")
       return
     }
 
@@ -204,6 +227,37 @@ export function SettingsPage() {
       toast.error(message)
     } finally {
       setInviting(false)
+    }
+  }
+
+  const handleWorkspaceRename = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedWorkspace || !tokens?.access) {
+      return
+    }
+
+    const trimmedName = workspaceName.trim()
+    if (!trimmedName) {
+      toast.error("Le nom du workspace est requis.")
+      return
+    }
+
+    if (trimmedName === (selectedWorkspace.name ?? "").trim()) {
+      toast.info("Aucune modification détectée.")
+      return
+    }
+
+    setIsSavingWorkspace(true)
+    try {
+      const updated = await updateWorkspace(selectedWorkspace.id, { name: trimmedName }, tokens.access)
+      toast.success("Nom du workspace mis à jour.")
+      selectWorkspace(updated)
+      persistSelectedWorkspace(updated)
+      setWorkspaceName(updated.name ?? trimmedName)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Impossible de renommer le workspace.")
+    } finally {
+      setIsSavingWorkspace(false)
     }
   }
 
@@ -309,19 +363,40 @@ export function SettingsPage() {
     }
   }, [selectedWorkspace, selectWorkspace, navigate])
 
-  const workspaceName = useMemo(
-    () => selectedWorkspace?.name ?? "Aucun workspace sélectionné",
-    [selectedWorkspace]
-  )
 
   const handleChange = (field: keyof ProfileFormState) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       setFormState((previous) => ({ ...previous, [field]: event.target.value }))
     }
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    toast.success("Profil mis à jour localement.")
+    if (!tokens?.access) return
+
+    const trimmedFirst = formState.firstName.trim()
+    const trimmedLast = formState.lastName.trim()
+
+    if (!trimmedFirst || !trimmedLast) {
+      toast.error("Le nom et le prénom sont requis.")
+      return
+    }
+
+    setIsSavingProfile(true)
+    try {
+      await updateProfile(
+        { first_name: trimmedFirst, last_name: trimmedLast },
+        tokens.access
+      )
+      toast.success("Profil mis à jour avec succès.")
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Impossible de mettre à jour le profil."
+      )
+    } finally {
+      setIsSavingProfile(false)
+    }
   }
 
   const handleDeleteWorkspace = async () => {
@@ -480,9 +555,13 @@ export function SettingsPage() {
                     id="firstName"
                     value={formState.firstName}
                     onChange={handleChange("firstName")}
+                    onBlur={() => setProfileTouched((prev) => ({ ...prev, firstName: true }))}
                     required
-                    className="rounded-xl border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                    className={`rounded-xl border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20 ${profileTouched.firstName && !formState.firstName.trim() ? "border-destructive" : ""}`}
                   />
+                  {profileTouched.firstName && !formState.firstName.trim() && (
+                    <p className="text-xs font-medium text-destructive">Prénom requis.</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName" className="text-sm font-medium text-foreground">
@@ -492,9 +571,13 @@ export function SettingsPage() {
                     id="lastName"
                     value={formState.lastName}
                     onChange={handleChange("lastName")}
+                    onBlur={() => setProfileTouched((prev) => ({ ...prev, lastName: true }))}
                     required
-                    className="rounded-xl border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                    className={`rounded-xl border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20 ${profileTouched.lastName && !formState.lastName.trim() ? "border-destructive" : ""}`}
                   />
+                  {profileTouched.lastName && !formState.lastName.trim() && (
+                    <p className="text-xs font-medium text-destructive">Nom requis.</p>
+                  )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="email" className="text-sm font-medium text-foreground">
@@ -504,18 +587,19 @@ export function SettingsPage() {
                     id="email"
                     type="email"
                     value={formState.email}
-                    onChange={handleChange("email")}
-                    required
-                    className="rounded-xl border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                    disabled
+                    className="rounded-xl border-border/60 bg-muted transition-all"
                   />
+                  <p className="text-xs text-muted-foreground">L'adresse email ne peut pas être modifiée.</p>
                 </div>
               </CardContent>
               <CardFooter className="border-t border-border/50 bg-muted/20 px-6 py-4">
                 <Button
                   type="submit"
+                  disabled={isSavingProfile}
                   className="ml-auto rounded-xl bg-[#0c6e85] px-6 py-2.5 text-white shadow-lg shadow-[#0c6e85]/20 transition-all hover:bg-[#0a5a6c] hover:shadow-xl"
                 >
-                  Enregistrer les changements
+                  {isSavingProfile ? "Enregistrement…" : "Enregistrer les changements"}
                 </Button>
               </CardFooter>
             </form>
@@ -612,15 +696,45 @@ export function SettingsPage() {
                       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0c6e85]/10">
                         <Building2 className="h-6 w-6 text-[#0c6e85]" />
                       </div>
-                      <div className="space-y-1">
-                        <CardTitle className="text-xl font-semibold text-foreground">
-                          {selectedWorkspace.name}
-                        </CardTitle>
-                        <CardDescription>
-                          Type : {selectedWorkspace.type_client ?? "—"} · Produit(s) :
-                          {" "}
-                          {selectedWorkspace.products_details?.map((product) => product.name).join(", ") ?? "—"}
-                        </CardDescription>
+                      <div className="space-y-3">
+                        <form className="flex flex-col gap-3" onSubmit={handleWorkspaceRename}>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                            <Input
+                              value={workspaceName}
+                              onChange={(event) => setWorkspaceName(event.target.value)}
+                              maxLength={150}
+                              className="h-10 rounded-xl border border-border/60 bg-white text-lg font-semibold text-foreground shadow-sm transition focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                type="submit"
+                                size="icon"
+                                className="h-10 w-10 rounded-xl bg-[#0c6e85] text-white hover:bg-[#085a69]"
+                                disabled={isSavingWorkspace}
+                              >
+                                {isSavingWorkspace ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Check className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="outline"
+                                className="h-10 w-10 rounded-xl"
+                                onClick={() => setWorkspaceName(selectedWorkspace.name ?? "")}
+                                disabled={isSavingWorkspace}
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <CardDescription>
+                            Type : {selectedWorkspace.type_client ?? "—"} · Produit(s) : {" "}
+                            {selectedWorkspace.products_details?.map((product) => product.name).join(", ") ?? "—"}
+                          </CardDescription>
+                        </form>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
@@ -659,7 +773,17 @@ export function SettingsPage() {
                   <InfoTile label="Identifiant client" value={selectedWorkspace.id_client ?? "—"} />
                   <InfoTile
                     label="Abonnement"
-                    value={selectedWorkspace.paystack_subscription_plan ?? "Plan à définir"}
+                    value={(() => {
+                      const plan = selectedWorkspace.paystack_subscription_plan?.toLowerCase();
+                      if (!plan) return "Plan à définir";
+
+                      const labels: Record<string, string> = {
+                        monthly: "Mensuel",
+                        quarterly: "Trimestriel",
+                        yearly: "Annuel",
+                      };
+                      return labels[plan] ?? selectedWorkspace.paystack_subscription_plan;
+                    })()}
                   />
                   <InfoTile
                     label="Début de période"
@@ -697,11 +821,17 @@ export function SettingsPage() {
                           id="member-email"
                           type="email"
                           value={memberForm.email}
-                          onChange={(event) => handleMemberFormChange("email", event.target.value)}
+                          onChange={(event) => {
+                            handleMemberFormChange("email", event.target.value)
+                            if (memberError) setMemberError(null)
+                          }}
                           required
                           placeholder="membre@entreprise.com"
-                          className="rounded-xl mt-2 border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20"
+                          className={`rounded-xl mt-2 border-border/60 transition-all focus:border-[#0c6e85] focus:ring-[#0c6e85]/20 ${memberError ? "border-destructive" : ""}`}
                         />
+                        {memberError && (
+                          <p className="text-xs font-medium text-destructive">{memberError}</p>
+                        )}
                       </div>
                       <div className="space-y-2 hidden">
                         <Label htmlFor="member-role">Rôle</Label>

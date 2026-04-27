@@ -20,7 +20,7 @@ export function RequestCodePage() {
     if (!value) {
       return "Merci d'indiquer votre adresse email."
     }
-    const emailRegex = /.+@.+\..+/i
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
     if (!emailRegex.test(value)) {
       return "Adresse email invalide."
     }

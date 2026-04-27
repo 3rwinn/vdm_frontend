@@ -34,6 +34,7 @@ import {
 import { buildPath, paths } from "@/routes/paths";
 import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown";
 import { MetvDashboard } from "@/pages/dashboard/metv-dashboard";
+import { MerDashboard } from "@/pages/dashboard/mer-dashboard";
 import { MepDashboard } from "@/pages/dashboard/mep-dashboard";
 import { MemDashboard } from "@/pages/dashboard/mem-dashboard";
 import {
@@ -129,18 +130,23 @@ export function DashboardPage() {
     ? String(activeProduct.code).trim().toLowerCase()
     : null;
   const isMetv = productCode === "metv";
+  const isMer = productCode === "mer";
   const isMep = productCode === "mep";
   const isMem = productCode === "mem";
   const requiresBrandSelect = isMep;
-  const needsChannelSelection = isMetv || requiresBrandSelect;
-  const canConfigureFilters = isMetv || isMep || isMem;
+  const needsChannelSelection = isMetv || isMer || requiresBrandSelect;
+  const canConfigureFilters = isMetv || isMer || isMep || isMem;
 
   const channelSelectLabel = useMemo(() => {
-    return requiresBrandSelect ? "Produit / marque" : "Chaîne";
-  }, [requiresBrandSelect]);
+    if (requiresBrandSelect) return "Produit / marque";
+    if (isMer) return "Station radio";
+    return "Chaîne TV";
+  }, [requiresBrandSelect, isMer]);
   const channelPlaceholder = useMemo(() => {
-    return requiresBrandSelect ? "Sélectionnez un produit / marque" : "Sélectionnez une chaîne";
-  }, [requiresBrandSelect]);
+    if (requiresBrandSelect) return "Sélectionnez un produit / marque";
+    if (isMer) return "Sélectionnez une station";
+    return "Sélectionnez une chaîne";
+  }, [requiresBrandSelect, isMer]);
 
   const displayDateFormatter = useMemo(
     () =>
@@ -234,7 +240,7 @@ export function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [tokens?.access, isMetv, requiresBrandSelect]);
+  }, [tokens?.access, isMetv, isMer, requiresBrandSelect]);
 
   const loadChannelOptions = useCallback(
     async (sectorValue: string, preselected?: string) => {
@@ -251,10 +257,13 @@ export function DashboardPage() {
         const activeChannelRaw = preselected ?? modalChannelValue;
         const activeChannelTrimmed = activeChannelRaw?.trim();
 
-        if (isMetv) {
+        if (isMetv || isMer) {
           const response = await fetchChainsBySector(normalizedSector, tokens.access);
           const chains = response.chaines ?? [];
-          const mapped = chains.map((chain) => ({
+          const filtered = isMer
+            ? chains.filter((chain) => chain.toLowerCase().includes("radio"))
+            : chains;
+          const mapped = filtered.map((chain) => ({
             value: chain,
             label: chain,
           }));
@@ -294,7 +303,7 @@ export function DashboardPage() {
         setChannelError(
           error instanceof Error
             ? error.message
-            : isMetv
+            : isMetv || isMer
             ? "Impossible de charger les chaînes."
             : "Impossible de charger les produits / marques."
         );
@@ -303,7 +312,7 @@ export function DashboardPage() {
         setChannelLoading(false);
       }
     },
-    [tokens?.access, requiresBrandSelect, modalChannelValue, isMetv]
+    [tokens?.access, requiresBrandSelect, modalChannelValue, isMetv, isMer]
   );
 
   useEffect(() => {
@@ -311,7 +320,7 @@ export function DashboardPage() {
       return;
     }
 
-    if (!(isMetv || requiresBrandSelect)) {
+    if (!(isMetv || isMer || requiresBrandSelect)) {
       return;
     }
 
@@ -328,6 +337,7 @@ export function DashboardPage() {
     modalChannelValue,
     loadChannelOptions,
     isMetv,
+    isMer,
     requiresBrandSelect,
   ]);
 
@@ -512,7 +522,7 @@ export function DashboardPage() {
     setModalToDate(baseRange?.to);
     setFilterDialogOpen(true);
 
-    if ((isMetv || requiresBrandSelect) && baseSector) {
+    if ((isMetv || isMer || requiresBrandSelect) && baseSector) {
       loadChannelOptions(baseSector, baseChannel);
     } else {
       setChannelOptions([]);
@@ -531,6 +541,8 @@ export function DashboardPage() {
       toast.error(
         requiresBrandSelect
           ? "Merci de sélectionner un produit / marque."
+          : isMer
+          ? "Merci de sélectionner une station."
           : "Merci de sélectionner une chaîne."
       );
       return;
@@ -738,6 +750,20 @@ export function DashboardPage() {
                 </span>
               ) : null}
             </div>
+          ) : productCode === "mer" ? (
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-xs text-muted-foreground">
+                Station suivie : {channelIdentifier || "—"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Période : {effectiveDateLabel.from} → {effectiveDateLabel.to}
+              </span>
+              {isCustomFilterActive ? (
+                <span className="text-xs font-semibold uppercase tracking-wide text-[#0c6e85]">
+                  Filtres personnalisés actifs
+                </span>
+              ) : null}
+            </div>
           ) : productCode === "mep" ? (
             <div className="flex flex-col items-end gap-1 text-right">
               <span className="text-xs text-muted-foreground">
@@ -786,6 +812,8 @@ export function DashboardPage() {
               <DialogDescription>
                 {isMetv
                   ? "Ajustez le secteur suivi et la chaîne analysée pour ce workspace."
+                  : isMer
+                  ? "Ajustez le secteur suivi et la station analysée pour ce workspace."
                   : isMep
                   ? "Ajustez le secteur et le produit / marque analysés pour ce workspace MEP."
                   : "Sélectionnez un intervalle de dates pour explorer les tendances MEM."}
@@ -954,6 +982,12 @@ export function DashboardPage() {
         <MetvDashboard
           ddaData={ddaData}
           channelIdentifier={channelIdentifier}
+          sectorIdentifier={sectorIdentifier}
+        />
+      ) : productCode === "mer" ? (
+        <MerDashboard
+          ddaData={ddaData}
+          stationIdentifier={channelIdentifier}
           sectorIdentifier={sectorIdentifier}
         />
       ) : productCode === "mep" ? (

@@ -79,6 +79,28 @@ export function verifyValidationCode(payload: VerifyPayload) {
   });
 }
 
+export interface ProfileResponse {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+export function fetchProfile(token: string) {
+  return request<ProfileResponse>("/profile/", { token });
+}
+
+export function updateProfile(
+  payload: { first_name?: string; last_name?: string },
+  token: string
+) {
+  return request<ProfileResponse>("/profile/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+    token,
+  });
+}
+
 export interface ProductResponse {
   id: number;
   name: string;
@@ -177,6 +199,26 @@ export function deleteWorkspace(workspaceId: number, token: string) {
   return request<undefined>(`/workspaces/${workspaceId}/`, {
     method: "DELETE",
     parseJson: false,
+    token,
+  });
+}
+
+export interface UpdateWorkspacePayload {
+  name?: string;
+  type_client?: string;
+  sector_activity?: string;
+  id_client?: string;
+  products?: Array<number | string | Record<string, unknown>>;
+}
+
+export function updateWorkspace(
+  workspaceId: number,
+  payload: UpdateWorkspacePayload,
+  token: string
+) {
+  return request<WorkspaceResponse>(`/workspaces/${workspaceId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
     token,
   });
 }
@@ -626,4 +668,85 @@ export async function downloadPigeReport({
   }
 
   return response.blob();
+}
+
+
+// ---------------------------------------------------------------------------
+// Pige Schedule (programmation d'envoi par email)
+// ---------------------------------------------------------------------------
+
+export interface PigeSchedule {
+  id: number;
+  workspace: number;
+  report_type: "channel" | "advertiser";
+  sector: string;
+  identifier: string;
+  frequency: "monthly" | "quarterly" | "yearly";
+  recipients: string[];
+  is_active: boolean;
+  last_sent_at: string | null;
+  next_run_at: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePigeSchedulePayload {
+  frequency: "monthly" | "quarterly" | "yearly";
+  recipients: string[];
+}
+
+export function fetchPigeSchedules(
+  workspaceId: number,
+  token?: string
+): Promise<PigeSchedule[]> {
+  return request<PigeSchedule[]>(
+    `/workspaces/${workspaceId}/pige-schedules/`,
+    { token }
+  );
+}
+
+export function createPigeSchedule(
+  workspaceId: number,
+  payload: CreatePigeSchedulePayload,
+  token?: string
+): Promise<PigeSchedule> {
+  return request<PigeSchedule>(
+    `/workspaces/${workspaceId}/pige-schedules/`,
+    { method: "POST", body: JSON.stringify(payload), token }
+  );
+}
+
+export function updatePigeSchedule(
+  workspaceId: number,
+  scheduleId: number,
+  payload: Partial<CreatePigeSchedulePayload & { is_active: boolean }>,
+  token?: string
+): Promise<PigeSchedule> {
+  return request<PigeSchedule>(
+    `/workspaces/${workspaceId}/pige-schedules/${scheduleId}/`,
+    { method: "PATCH", body: JSON.stringify(payload), token }
+  );
+}
+
+export function deletePigeSchedule(
+  workspaceId: number,
+  scheduleId: number,
+  token?: string
+): Promise<void> {
+  return request<void>(
+    `/workspaces/${workspaceId}/pige-schedules/${scheduleId}/`,
+    { method: "DELETE", parseJson: false, token }
+  );
+}
+
+export function sendPigeTestEmail(
+  workspaceId: number,
+  recipients: string[],
+  token?: string
+): Promise<{ message: string }> {
+  return request<{ message: string }>(
+    `/workspaces/${workspaceId}/pige-schedules/test-email/`,
+    { method: "POST", body: JSON.stringify({ recipients }), token }
+  );
 }

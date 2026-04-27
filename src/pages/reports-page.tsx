@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CalendarIcon, FileDown, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
+import { CalendarIcon, Check, FileDown, Loader2, Mail, Send, Settings2, SlidersHorizontal, Trash2 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
@@ -62,9 +62,14 @@ import { format } from "date-fns"
 import { useAuth } from "@/hooks/use-auth"
 import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown"
 import {
+  createPigeSchedule,
+  deletePigeSchedule,
   downloadPigeReport,
+  fetchPigeSchedules,
   fetchReportsData,
+  sendPigeTestEmail,
   type CleanDataRecord,
+  type PigeSchedule,
   type ReportsQueryParams,
 } from "@/lib/api"
 import { getStoredWorkspace } from "@/lib/workspaces"
@@ -259,6 +264,15 @@ export function ReportsPage() {
   const [valorizationOperator, setValorizationOperator] = useState<"any" | "gt" | "eq" | "lt">("any")
   const [valorizationAmount, setValorizationAmount] = useState("")
   const [pigeLoading, setPigeLoading] = useState(false)
+
+  // Pige schedule state
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
+  const [scheduleFrequency, setScheduleFrequency] = useState<"monthly" | "quarterly" | "yearly">("monthly")
+  const [scheduleRecipients, setScheduleRecipients] = useState("")
+  const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [scheduleDeleting, setScheduleDeleting] = useState(false)
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [existingSchedule, setExistingSchedule] = useState<PigeSchedule | null>(null)
 
   useEffect(() => {
     setFormFilters({ ...defaultFilters })
@@ -668,6 +682,125 @@ export function ReportsPage() {
     tokens?.access,
   ])
 
+  // Fetch existing pige schedule for this workspace
+  useEffect(() => {
+    if (!supportsPigeDownload || !selectedWorkspace || !tokens?.access) {
+      setExistingSchedule(null)
+      return
+    }
+    fetchPigeSchedules(selectedWorkspace.id, tokens.access)
+      .then((schedules) => {
+        const active = schedules.find((s) => s.is_active) ?? schedules[0] ?? null
+        setExistingSchedule(active)
+        if (active) {
+          setScheduleFrequency(active.frequency)
+          setScheduleRecipients(active.recipients.join(", "))
+        }
+      })
+      .catch(() => setExistingSchedule(null))
+  }, [supportsPigeDownload, selectedWorkspace?.id, tokens?.access])
+
+  const handleOpenScheduleDialog = useCallback(() => {
+    if (existingSchedule) {
+      setScheduleFrequency(existingSchedule.frequency)
+      setScheduleRecipients(existingSchedule.recipients.join(", "))
+    } else {
+      setScheduleFrequency("monthly")
+      setScheduleRecipients("")
+    }
+    setScheduleDialogOpen(true)
+  }, [existingSchedule])
+
+  const handleSaveSchedule = useCallback(async () => {
+    if (!selectedWorkspace || !tokens?.access) return
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+    const emails = scheduleRecipients
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+
+    if (emails.length === 0) {
+      toast.error("Ajoutez au moins une adresse email.")
+      return
+    }
+
+    const invalidEmail = emails.find((e) => !emailRegex.test(e))
+    if (invalidEmail) {
+      toast.error(`Adresse email invalide : ${invalidEmail}`)
+      return
+    }
+
+    setScheduleSaving(true)
+    try {
+      const result = await createPigeSchedule(
+        selectedWorkspace.id,
+        { frequency: scheduleFrequency, recipients: emails },
+        tokens.access
+      )
+      setExistingSchedule(result)
+      setScheduleDialogOpen(false)
+      toast.success("Programmation enregistrée.")
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Impossible d'enregistrer la programmation."
+      )
+    } finally {
+      setScheduleSaving(false)
+    }
+  }, [selectedWorkspace, tokens?.access, scheduleFrequency, scheduleRecipients])
+
+  const handleDeleteSchedule = useCallback(async () => {
+    if (!selectedWorkspace || !tokens?.access || !existingSchedule) return
+
+    setScheduleDeleting(true)
+    try {
+      await deletePigeSchedule(selectedWorkspace.id, existingSchedule.id, tokens.access)
+      setExistingSchedule(null)
+      setScheduleRecipients("")
+      toast.success("Programmation désactivée.")
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Impossible de désactiver la programmation."
+      )
+    } finally {
+      setScheduleDeleting(false)
+    }
+  }, [selectedWorkspace, tokens?.access, existingSchedule])
+
+  const handleSendTestEmail = useCallback(async () => {
+    if (!selectedWorkspace || !tokens?.access) return
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
+    const emails = scheduleRecipients
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+
+    if (emails.length === 0) {
+      toast.error("Ajoutez au moins une adresse email pour le test.")
+      return
+    }
+
+    const invalidEmail = emails.find((e) => !emailRegex.test(e))
+    if (invalidEmail) {
+      toast.error(`Adresse email invalide : ${invalidEmail}`)
+      return
+    }
+
+    setSendingTestEmail(true)
+    try {
+      await sendPigeTestEmail(selectedWorkspace.id, emails, tokens.access)
+      toast.success("Email de test envoyé !")
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Impossible d'envoyer l'email de test."
+      )
+    } finally {
+      setSendingTestEmail(false)
+    }
+  }, [selectedWorkspace, tokens?.access, scheduleRecipients])
+
   const handlePageChange = useCallback(
     (nextPage: number) => {
       const bounded = Math.min(Math.max(1, nextPage), totalPages)
@@ -800,7 +933,17 @@ export function ReportsPage() {
       </header>
 
       {supportsPigeDownload ? (
-        <div className="mb-6 flex items-center justify-end">
+        <div className="mb-6 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            onClick={handleOpenScheduleDialog}
+            variant="outline"
+            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium"
+          >
+            <Mail className="h-4 w-4" />
+            {existingSchedule ? "Programmation active" : "Programmer l'envoi"}
+            {existingSchedule ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : null}
+          </Button>
           <Button
             type="button"
             onClick={handleDownloadPige}
@@ -816,6 +959,116 @@ export function ReportsPage() {
           </Button>
         </div>
       ) : null}
+
+      {/* Pige schedule dialog */}
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Programmer l'envoi du rapport PIGE</DialogTitle>
+            <DialogDescription>
+              Recevez automatiquement le rapport PIGE par email selon la fréquence choisie.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Fréquence</Label>
+              <Select
+                value={scheduleFrequency}
+                onValueChange={(v) =>
+                  setScheduleFrequency(v as "monthly" | "quarterly" | "yearly")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Mensuel</SelectItem>
+                  <SelectItem value="quarterly">Trimestriel</SelectItem>
+                  <SelectItem value="yearly">Annuel</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Destinataires</Label>
+              <Input
+                placeholder="email1@example.com, email2@example.com"
+                value={scheduleRecipients}
+                onChange={(e) => setScheduleRecipients(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Séparez les adresses email par des virgules.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSendTestEmail}
+                disabled={sendingTestEmail}
+                className="mt-1"
+              >
+                {sendingTestEmail ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Envoyer un mail de test
+              </Button>
+            </div>
+
+            {existingSchedule ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                  <Check className="h-4 w-4" />
+                  Programmation active
+                </div>
+                <p className="text-xs text-emerald-700">
+                  Prochain envoi : {formatDateTime(existingSchedule.next_run_at)}
+                </p>
+                {existingSchedule.last_sent_at ? (
+                  <p className="text-xs text-emerald-700">
+                    Dernier envoi : {formatDateTime(existingSchedule.last_sent_at)}
+                  </p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 text-destructive hover:text-destructive"
+                  onClick={handleDeleteSchedule}
+                  disabled={scheduleDeleting}
+                >
+                  {scheduleDeleting ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Désactiver la programmation
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setScheduleDialogOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveSchedule}
+              disabled={scheduleSaving}
+              className="bg-[#0c6e85] text-white hover:bg-[#0a5a6c]"
+            >
+              {scheduleSaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Enregistrer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={filterDialogOpen} onOpenChange={handleDialogChange}>
         <DialogContent size="lg" className="space-y-6">
@@ -1208,9 +1461,7 @@ export function ReportsPage() {
                   <p className="text-xs text-muted-foreground">
                     {filteredData.length === 0
                       ? "Aucune donnée disponible."
-                      : `Affichage de ${
-                          pagination.start + 1
-                        } à ${pagination.end} sur ${filteredData.length} entrées.`}
+                      : `Affichage de ${(pagination.start + 1).toLocaleString("fr-FR")} à ${pagination.end.toLocaleString("fr-FR")} sur ${filteredData.length.toLocaleString("fr-FR")} entrées.`}
                   </p>
                   <div className="flex flex-wrap items-center gap-4">
                     <div className="flex items-center gap-2">

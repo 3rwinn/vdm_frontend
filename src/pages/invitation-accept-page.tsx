@@ -33,6 +33,24 @@ interface InvitationFormState {
   confirm: string
 }
 
+interface InvitationFormErrors {
+  first_name?: string
+  last_name?: string
+  password?: string
+  confirm?: string
+}
+
+function validateInvitationForm(state: InvitationFormState): InvitationFormErrors {
+  const errors: InvitationFormErrors = {}
+  if (!state.first_name.trim()) errors.first_name = "Prénom requis."
+  if (!state.last_name.trim()) errors.last_name = "Nom requis."
+  if (state.password && state.password.length < 8)
+    errors.password = "8 caractères minimum."
+  if (state.confirm && state.password !== state.confirm)
+    errors.confirm = "Les mots de passe ne correspondent pas."
+  return errors
+}
+
 // Helper function to translate role names from English to French
 function translateRole(role: string | null | undefined): string {
   if (!role) return "membre"
@@ -62,6 +80,8 @@ export function InvitationAcceptPage() {
     password: "",
     confirm: "",
   })
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const formErrors = validateInvitationForm(formState)
 
   useEffect(() => {
     if (!token) {
@@ -86,19 +106,21 @@ export function InvitationAcceptPage() {
     setFormState((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleBlur = (field: keyof InvitationFormState) => {
+    setTouched((prev) => ({ ...prev, [field]: true }))
+  }
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token || !invitation) {
       return
     }
 
-    if (formState.password.length < 8) {
-      toast.error("Le mot de passe doit contenir au moins 8 caractères.")
-      return
-    }
+    // Mark all fields as touched to show any remaining errors
+    setTouched({ first_name: true, last_name: true, password: true, confirm: true })
 
-    if (formState.password !== formState.confirm) {
-      toast.error("Les mots de passe ne correspondent pas.")
+    const errors = validateInvitationForm(formState)
+    if (Object.keys(errors).length > 0) {
       return
     }
 
@@ -106,11 +128,6 @@ export function InvitationAcceptPage() {
       first_name: formState.first_name.trim(),
       last_name: formState.last_name.trim(),
       password: formState.password,
-    }
-
-    if (!payload.first_name || !payload.last_name) {
-      toast.error("Veuillez renseigner votre prénom et votre nom.")
-      return
     }
 
     setSubmitting(true)
@@ -171,8 +188,13 @@ export function InvitationAcceptPage() {
                     id="first_name"
                     value={formState.first_name}
                     onChange={(event) => handleChange("first_name", event.target.value)}
+                    onBlur={() => handleBlur("first_name")}
                     required
+                    className={touched.first_name && formErrors.first_name ? "border-destructive" : ""}
                   />
+                  {touched.first_name && formErrors.first_name && (
+                    <p className="text-xs font-medium text-destructive">{formErrors.first_name}</p>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="last_name">Nom</Label>
@@ -180,8 +202,13 @@ export function InvitationAcceptPage() {
                     id="last_name"
                     value={formState.last_name}
                     onChange={(event) => handleChange("last_name", event.target.value)}
+                    onBlur={() => handleBlur("last_name")}
                     required
+                    className={touched.last_name && formErrors.last_name ? "border-destructive" : ""}
                   />
+                  {touched.last_name && formErrors.last_name && (
+                    <p className="text-xs font-medium text-destructive">{formErrors.last_name}</p>
+                  )}
                 </div>
               </div>
 
@@ -193,9 +220,14 @@ export function InvitationAcceptPage() {
                     type="password"
                     value={formState.password}
                     onChange={(event) => handleChange("password", event.target.value)}
+                    onBlur={() => handleBlur("password")}
                     required
                     minLength={8}
+                    className={touched.password && formErrors.password ? "border-destructive" : ""}
                   />
+                  <p className={`text-xs ${touched.password && formErrors.password ? "font-medium text-destructive" : "text-muted-foreground"}`}>
+                    {touched.password && formErrors.password ? formErrors.password : "8 caractères minimum"}
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="confirm">Confirmer le mot de passe</Label>
@@ -204,9 +236,14 @@ export function InvitationAcceptPage() {
                     type="password"
                     value={formState.confirm}
                     onChange={(event) => handleChange("confirm", event.target.value)}
+                    onBlur={() => handleBlur("confirm")}
                     required
                     minLength={8}
+                    className={touched.confirm && formErrors.confirm ? "border-destructive" : ""}
                   />
+                  {touched.confirm && formErrors.confirm && (
+                    <p className="text-xs font-medium text-destructive">{formErrors.confirm}</p>
+                  )}
                 </div>
               </div>
 
