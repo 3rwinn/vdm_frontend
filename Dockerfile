@@ -14,9 +14,14 @@ ENV VITE_PAYSTACK_PUBLIC_KEY=${VITE_PAYSTACK_PUBLIC_KEY}
 
 # Debug: surface what build args actually arrived. Visible in Dokploy build logs.
 # Empty values here = build arg was not passed correctly from the platform UI.
+# Paystack key is masked: shows "set" + length, never the secret in clear text.
 RUN echo "=== BUILD-TIME VARIABLES ===" \
     && echo "VITE_API_URL=[${VITE_API_URL}]" \
-    && echo "VITE_PAYSTACK_PUBLIC_KEY=[${VITE_PAYSTACK_PUBLIC_KEY:+set}${VITE_PAYSTACK_PUBLIC_KEY:-MISSING}]" \
+    && if [ -n "$VITE_PAYSTACK_PUBLIC_KEY" ]; then \
+         echo "VITE_PAYSTACK_PUBLIC_KEY=[set, ${#VITE_PAYSTACK_PUBLIC_KEY} chars, prefix=${VITE_PAYSTACK_PUBLIC_KEY%%_*}_***]"; \
+       else \
+         echo "VITE_PAYSTACK_PUBLIC_KEY=[MISSING]"; \
+       fi \
     && echo "==========================="
 
 RUN npm run build
