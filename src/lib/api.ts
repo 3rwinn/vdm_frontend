@@ -1,5 +1,15 @@
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL ?? "http://localhost:8000/api";
+// Use `||` (not `??`) so an empty-string env var (e.g. Dockerfile ARG
+// declared but Build Arg missing in Dokploy) falls back to the dev URL
+// instead of producing relative `fetch("/register/")` calls.
+const ENV_API_URL = (import.meta.env.VITE_API_URL ?? "").trim();
+export const API_BASE_URL = ENV_API_URL || "http://localhost:8000/api";
+
+if (typeof window !== "undefined") {
+  // Surface the resolved base URL once on boot — makes "why is it calling
+  // app.vdmci.com instead of api.vdmci.com" trivially diagnosable in DevTools.
+  // eslint-disable-next-line no-console
+  console.info("[api] base URL:", API_BASE_URL);
+}
 
 type RequestOptions = RequestInit & { parseJson?: boolean; token?: string };
 
