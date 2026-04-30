@@ -33,7 +33,9 @@ interface UsePaystackResult {
   startTransaction: (options: StartTransactionOptions) => void
 }
 
-const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ?? ""
+// Use `||` (not `??`) so an empty-string env var — Dockerfile ARG declared
+// but Build Arg missing in Dokploy — is treated the same as missing.
+const PAYSTACK_PUBLIC_KEY = (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY ?? "").trim() || ""
 
 export function usePaystack(): UsePaystackResult {
   const paystackPop = useMemo(() => new PaystackPop(), [])
