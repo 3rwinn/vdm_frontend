@@ -2,7 +2,7 @@
 // declared but Build Arg missing in Dokploy) falls back to the dev URL
 // instead of producing relative `fetch("/register/")` calls.
 const ENV_API_URL = (import.meta.env.VITE_API_URL ?? "").trim();
-export const API_BASE_URL = ENV_API_URL || "http://localhost:8000/api";
+export const API_BASE_URL = ENV_API_URL || "http://api.vdmci.com/api";
 
 if (typeof window !== "undefined") {
   // Surface the resolved base URL once on boot — makes "why is it calling
