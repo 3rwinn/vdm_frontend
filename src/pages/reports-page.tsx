@@ -20,6 +20,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Combobox } from "@/components/ui/combobox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -65,8 +66,10 @@ import {
   createPigeSchedule,
   deletePigeSchedule,
   downloadPigeReport,
+  fetchBrandsBySector,
   fetchPigeSchedules,
   fetchReportsData,
+  fetchSectors,
   sendPigeTestEmail,
   type CleanDataRecord,
   type PigeSchedule,
@@ -260,6 +263,10 @@ export function ReportsPage() {
   const [pageSize, setPageSize] = useState<number>(25)
   const [page, setPage] = useState<number>(1)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
+  const [sectorList, setSectorList] = useState<string[]>([])
+  const [sectorListLoading, setSectorListLoading] = useState(false)
+  const [mepAdvertiserList, setMepAdvertiserList] = useState<string[]>([])
+  const [mepAdvertiserLoading, setMepAdvertiserLoading] = useState(false)
   const [tableSearch, setTableSearch] = useState("")
   const [valorizationOperator, setValorizationOperator] = useState<"any" | "gt" | "eq" | "lt">("any")
   const [valorizationAmount, setValorizationAmount] = useState("")
@@ -268,6 +275,7 @@ export function ReportsPage() {
   // Pige schedule state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false)
   const [scheduleFrequency, setScheduleFrequency] = useState<"monthly" | "quarterly" | "yearly">("monthly")
+  const [scheduleSendHour, setScheduleSendHour] = useState<number>(8)
   const [scheduleRecipients, setScheduleRecipients] = useState("")
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleDeleting, setScheduleDeleting] = useState(false)
@@ -350,6 +358,59 @@ export function ReportsPage() {
     isMer,
     isMep,
   ])
+
+  useEffect(() => {
+    if (!tokens?.access) {
+      setSectorList([])
+      return
+    }
+    let cancelled = false
+    setSectorListLoading(true)
+    fetchSectors(tokens.access)
+      .then((response) => {
+        if (cancelled) return
+        setSectorList(response.sectors ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSectorList([])
+      })
+      .finally(() => {
+        if (!cancelled) setSectorListLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tokens?.access])
+
+  useEffect(() => {
+    if (!isMep || !tokens?.access) {
+      setMepAdvertiserList([])
+      return
+    }
+    const sector = formFilters.sector.trim()
+    if (!sector) {
+      setMepAdvertiserList([])
+      return
+    }
+    let cancelled = false
+    setMepAdvertiserLoading(true)
+    fetchBrandsBySector(sector, tokens.access)
+      .then((response) => {
+        if (cancelled) return
+        setMepAdvertiserList(response.marques ?? [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setMepAdvertiserList([])
+      })
+      .finally(() => {
+        if (!cancelled) setMepAdvertiserLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isMep, tokens?.access, formFilters.sector])
 
   useEffect(() => {
     setPage(1)
@@ -535,6 +596,38 @@ export function ReportsPage() {
     [rawData]
   )
 
+  const sectorOptions = useMemo(() => {
+    const values = new Set<string>()
+    sectorList.forEach((value) => {
+      if (value && value.trim()) values.add(value.trim())
+    })
+    uniqueSortedValues(rawData, (row) => row.secteur_activite).forEach((value) => {
+      values.add(value)
+    })
+    if (formFilters.sector && formFilters.sector.trim()) {
+      values.add(formFilters.sector.trim())
+    }
+    return Array.from(values).sort((a, b) =>
+      a.localeCompare(b, "fr", { sensitivity: "base", ignorePunctuation: true })
+    )
+  }, [sectorList, rawData, formFilters.sector])
+
+  const mepAdvertiserOptions = useMemo(() => {
+    const values = new Set<string>()
+    mepAdvertiserList.forEach((value) => {
+      if (value && value.trim()) values.add(value.trim())
+    })
+    uniqueSortedValues(rawData, (row) => row.annonceur).forEach((value) => {
+      values.add(value)
+    })
+    if (formFilters.advertiser && formFilters.advertiser.trim()) {
+      values.add(formFilters.advertiser.trim())
+    }
+    return Array.from(values).sort((a, b) =>
+      a.localeCompare(b, "fr", { sensitivity: "base", ignorePunctuation: true })
+    )
+  }, [mepAdvertiserList, rawData, formFilters.advertiser])
+
   const handleDialogChange = useCallback(
     (open: boolean) => {
       if (open) {
@@ -694,6 +787,7 @@ export function ReportsPage() {
         setExistingSchedule(active)
         if (active) {
           setScheduleFrequency(active.frequency)
+          setScheduleSendHour(active.send_hour ?? 8)
           setScheduleRecipients(active.recipients.join(", "))
         }
       })
@@ -703,9 +797,11 @@ export function ReportsPage() {
   const handleOpenScheduleDialog = useCallback(() => {
     if (existingSchedule) {
       setScheduleFrequency(existingSchedule.frequency)
+      setScheduleSendHour(existingSchedule.send_hour ?? 8)
       setScheduleRecipients(existingSchedule.recipients.join(", "))
     } else {
       setScheduleFrequency("monthly")
+      setScheduleSendHour(8)
       setScheduleRecipients("")
     }
     setScheduleDialogOpen(true)
@@ -735,7 +831,11 @@ export function ReportsPage() {
     try {
       const result = await createPigeSchedule(
         selectedWorkspace.id,
-        { frequency: scheduleFrequency, recipients: emails },
+        {
+          frequency: scheduleFrequency,
+          send_hour: scheduleSendHour,
+          recipients: emails,
+        },
         tokens.access
       )
       setExistingSchedule(result)
@@ -748,7 +848,7 @@ export function ReportsPage() {
     } finally {
       setScheduleSaving(false)
     }
-  }, [selectedWorkspace, tokens?.access, scheduleFrequency, scheduleRecipients])
+  }, [selectedWorkspace, tokens?.access, scheduleFrequency, scheduleSendHour, scheduleRecipients])
 
   const handleDeleteSchedule = useCallback(async () => {
     if (!selectedWorkspace || !tokens?.access || !existingSchedule) return
@@ -970,23 +1070,37 @@ export function ReportsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Fréquence</Label>
-              <Select
-                value={scheduleFrequency}
-                onValueChange={(v) =>
-                  setScheduleFrequency(v as "monthly" | "quarterly" | "yearly")
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">Mensuel</SelectItem>
-                  <SelectItem value="quarterly">Trimestriel</SelectItem>
-                  <SelectItem value="yearly">Annuel</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Fréquence</Label>
+                <Select
+                  value={scheduleFrequency}
+                  onValueChange={(v) =>
+                    setScheduleFrequency(v as "monthly" | "quarterly" | "yearly")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Mensuel</SelectItem>
+                    <SelectItem value="quarterly">Trimestriel</SelectItem>
+                    <SelectItem value="yearly">Annuel</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Heure d'envoi</Label>
+                <Combobox
+                  value={String(scheduleSendHour)}
+                  onValueChange={(value) => setScheduleSendHour(Number(value))}
+                  options={Array.from({ length: 24 }, (_, hour) => ({
+                    value: String(hour),
+                    label: `${hour.toString().padStart(2, "0")}:00`,
+                  }))}
+                  placeholder="Sélectionnez une heure"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Destinataires</Label>
@@ -1073,7 +1187,7 @@ export function ReportsPage() {
       <Dialog open={filterDialogOpen} onOpenChange={handleDialogChange}>
         <DialogContent size="lg" className="space-y-6">
           <DialogHeader>
-            <DialogTitle>Paramétrer les rapports</DialogTitle>
+            <DialogTitle>Parametrer les rapports</DialogTitle>
             <DialogDescription>
               Ajustez vos critères pour explorer les diffusions les plus pertinentes.
             </DialogDescription>
@@ -1082,16 +1196,27 @@ export function ReportsPage() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="filter-sector">Secteur analysé</Label>
-                <Input
+                <Combobox
                   id="filter-sector"
-                  placeholder="Secteur (ex : Agroalimentaire)"
                   value={formFilters.sector}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setFormFilters((prev) => ({
                       ...prev,
-                      sector: event.target.value,
+                      sector: value,
+                      advertiser: isMep ? "" : prev.advertiser,
                     }))
                   }
+                  options={sectorOptions.map((option) => ({
+                    value: option,
+                    label: option,
+                  }))}
+                  placeholder={
+                    sectorListLoading
+                      ? "Chargement..."
+                      : "Sélectionnez un secteur"
+                  }
+                  loading={sectorListLoading}
+                  disabled={sectorListLoading}
                 />
               </div>
               {(isMetv || isMer) && (
@@ -1113,16 +1238,28 @@ export function ReportsPage() {
               {isMep && (
                 <div className="space-y-1.5">
                   <Label htmlFor="filter-advertiser">Annonceur suivi</Label>
-                  <Input
+                  <Combobox
                     id="filter-advertiser"
-                    placeholder="Annonceur (ex : Unilever)"
                     value={formFilters.advertiser}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setFormFilters((prev) => ({
                         ...prev,
-                        advertiser: event.target.value,
+                        advertiser: value,
                       }))
                     }
+                    options={mepAdvertiserOptions.map((option) => ({
+                      value: option,
+                      label: option,
+                    }))}
+                    placeholder={
+                      !formFilters.sector.trim()
+                        ? "Sélectionnez d'abord un secteur"
+                        : mepAdvertiserLoading
+                        ? "Chargement..."
+                        : "Sélectionnez un annonceur"
+                    }
+                    loading={mepAdvertiserLoading}
+                    disabled={!formFilters.sector.trim() || mepAdvertiserLoading}
                   />
                 </div>
               )}
@@ -1130,7 +1267,8 @@ export function ReportsPage() {
                 <>
                   <div className="space-y-1.5">
                     <Label htmlFor="filter-channel-mem">Chaîne (optionnel)</Label>
-                    <Select
+                    <Combobox
+                      id="filter-channel-mem"
                       value={formFilters.channel || "all"}
                       onValueChange={(value) =>
                         setFormFilters((prev) => ({
@@ -1138,26 +1276,23 @@ export function ReportsPage() {
                           channel: value === "all" ? "" : value,
                         }))
                       }
+                      options={[
+                        { value: "all", label: "Toutes les chaînes" },
+                        ...chaineOptions.map((option) => ({
+                          value: option,
+                          label: option,
+                        })),
+                      ]}
+                      placeholder="Toutes les chaînes"
                       disabled={chaineOptions.length === 0}
-                    >
-                      <SelectTrigger id="filter-channel-mem">
-                        <SelectValue placeholder="Toutes les chaînes" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Toutes les chaînes</SelectItem>
-                        {chaineOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="filter-advertiser-mem">
                       Annonceur (optionnel)
                     </Label>
-                    <Select
+                    <Combobox
+                      id="filter-advertiser-mem"
                       value={formFilters.advertiser || "all"}
                       onValueChange={(value) =>
                         setFormFilters((prev) => ({
@@ -1165,24 +1300,21 @@ export function ReportsPage() {
                           advertiser: value === "all" ? "" : value,
                         }))
                       }
+                      options={[
+                        { value: "all", label: "Tous les annonceurs" },
+                        ...annonceurOptions.map((option) => ({
+                          value: option,
+                          label: option,
+                        })),
+                      ]}
+                      placeholder="Tous les annonceurs"
                       disabled={annonceurOptions.length === 0}
-                    >
-                      <SelectTrigger id="filter-advertiser-mem">
-                        <SelectValue placeholder="Tous les annonceurs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tous les annonceurs</SelectItem>
-                        {annonceurOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="filter-station">Type de station</Label>
-                    <Select
+                    <Combobox
+                      id="filter-station"
                       value={formFilters.stationType || "all"}
                       onValueChange={(value) =>
                         setFormFilters((prev) => ({
@@ -1190,26 +1322,23 @@ export function ReportsPage() {
                           stationType: value === "all" ? "" : value,
                         }))
                       }
+                      options={[
+                        { value: "all", label: "Tous les types" },
+                        ...stationTypeOptions.map((option) => ({
+                          value: option,
+                          label: option,
+                        })),
+                      ]}
+                      placeholder="Tous les types"
                       disabled={stationTypeOptions.length === 0}
-                    >
-                      <SelectTrigger id="filter-station">
-                        <SelectValue placeholder="Tous les types" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tous les types</SelectItem>
-                        {stationTypeOptions.map((option) => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    />
                   </div>
                 </>
               ) : null}
               <div className="space-y-1.5">
                 <Label htmlFor="filter-marque">Produit / marque</Label>
-                <Select
+                <Combobox
+                  id="filter-marque"
                   value={formFilters.marque || "all"}
                   onValueChange={(value) =>
                     setFormFilters((prev) => ({
@@ -1217,20 +1346,16 @@ export function ReportsPage() {
                       marque: value === "all" ? "" : value,
                     }))
                   }
+                  options={[
+                    { value: "all", label: "Toutes les marques" },
+                    ...marqueOptions.map((option) => ({
+                      value: option,
+                      label: option,
+                    })),
+                  ]}
+                  placeholder="Toutes les marques"
                   disabled={marqueOptions.length === 0}
-                >
-                  <SelectTrigger id="filter-marque">
-                    <SelectValue placeholder="Toutes les marques" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes les marques</SelectItem>
-                    {marqueOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
             </div>
 

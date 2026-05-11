@@ -46,13 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarIcon, Settings2 } from "lucide-react";
@@ -825,42 +819,22 @@ export function DashboardPage() {
                   <Label htmlFor="dda-sector" className="text-sm font-medium text-foreground">
                     Secteur analysé
                   </Label>
-                  <Select
-                    value={modalSectorValue || undefined}
+                  <Combobox
+                    id="dda-sector"
+                    value={modalSectorValue}
                     onValueChange={(value) => {
                       setModalSectorValue(value);
                       setModalChannelValue("");
                     }}
+                    options={sectorOptions}
+                    placeholder={
+                      sectorLoading ? "Chargement..." : "Sélectionnez un secteur"
+                    }
+                    loading={sectorLoading}
+                    emptyMessage="Aucun secteur disponible"
                     disabled={sectorLoading}
-                  >
-                    <SelectTrigger
-                      id="dda-sector"
-                      className="rounded-xl border border-border/60 bg-white text-sm font-medium"
-                    >
-                      <SelectValue
-                        placeholder={
-                          sectorLoading ? "Chargement..." : "Sélectionnez un secteur"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sectorLoading ? (
-                        <SelectItem value="__loading" disabled>
-                          Chargement...
-                        </SelectItem>
-                      ) : sectorOptions.length === 0 ? (
-                        <SelectItem value="__empty" disabled>
-                          Aucun secteur disponible
-                        </SelectItem>
-                      ) : (
-                        sectorOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    triggerClassName="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                  />
                   {sectorError ? (
                     <p className="text-xs font-medium text-destructive">{sectorError}</p>
                   ) : null}
@@ -872,45 +846,27 @@ export function DashboardPage() {
                   <Label htmlFor="dda-channel" className="text-sm font-medium text-foreground">
                     {channelSelectLabel}
                   </Label>
-                  <Select
-                    value={modalChannelValue || undefined}
+                  <Combobox
+                    id="dda-channel"
+                    value={modalChannelValue}
                     onValueChange={(value) => setModalChannelValue(value)}
+                    options={channelOptions}
+                    placeholder={
+                      !modalSectorValue.trim()
+                        ? "Choisissez un secteur d'abord"
+                        : channelLoading
+                        ? "Chargement..."
+                        : channelPlaceholder
+                    }
+                    loading={channelLoading}
+                    emptyMessage={
+                      modalSectorValue
+                        ? "Aucune option disponible"
+                        : "Sélectionnez d'abord un secteur"
+                    }
                     disabled={!modalSectorValue.trim() || channelLoading}
-                  >
-                    <SelectTrigger
-                      id="dda-channel"
-                      className="rounded-xl border border-border/60 bg-white text-sm font-medium"
-                    >
-                      <SelectValue
-                        placeholder={
-                          !modalSectorValue.trim()
-                            ? "Choisissez un secteur d'abord"
-                            : channelLoading
-                            ? "Chargement..."
-                            : channelPlaceholder
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {channelLoading ? (
-                        <SelectItem value="__loading" disabled>
-                          Chargement...
-                        </SelectItem>
-                      ) : channelOptions.length === 0 ? (
-                        <SelectItem value="__empty" disabled>
-                          {modalSectorValue
-                            ? "Aucune option disponible"
-                            : "Sélectionnez d'abord un secteur"}
-                        </SelectItem>
-                      ) : (
-                        channelOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                    triggerClassName="rounded-xl border border-border/60 bg-white text-sm font-medium"
+                  />
                   {channelError ? (
                     <p className="text-xs font-medium text-destructive">{channelError}</p>
                   ) : null}

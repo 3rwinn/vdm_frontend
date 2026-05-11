@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { BarChart3, CalendarIcon, Loader2, Sparkles } from "lucide-react"
+import { BarChart3, CalendarIcon, FileDown, Loader2, Sparkles } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts"
 import { useNavigate } from "react-router-dom"
 import { format } from "date-fns"
@@ -33,9 +33,11 @@ import { Calendar } from "@/components/ui/calendar"
 import { useAuth } from "@/hooks/use-auth"
 import { useWorkspaceDropdown } from "@/hooks/use-workspace-dropdown"
 import {
+  downloadSimulationReport,
   runSimulation,
   type SimulationChannelAllocation,
   type SimulationRecommendations,
+  type SimulationRequest,
 } from "@/lib/api"
 import { getStoredWorkspace } from "@/lib/workspaces"
 import { cn, formatCurrency } from "@/lib/utils"
@@ -185,6 +187,8 @@ export function SimulationPage() {
   const [simulationResult, setSimulationResult] = useState<SimulationRecommendations | null>(null)
   const [simulationError, setSimulationError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [lastRequest, setLastRequest] = useState<SimulationRequest | null>(null)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   const handleInputChange = useCallback(
     (field: keyof FormState, value: string | Date | undefined) => {
@@ -255,23 +259,23 @@ export function SimulationPage() {
 
       setLoadingSimulation(true)
 
+      const payload: SimulationRequest = {
+        advertiser: formState.advertiser.trim(),
+        investmentAmount,
+        advertisementDuration,
+        dateFrom: formatISODate(formState.startDate),
+        dateTo: formatISODate(formState.endDate),
+      }
+
       try {
-        const response = await runSimulation(
-          {
-            advertiser: formState.advertiser.trim(),
-            investmentAmount,
-            advertisementDuration,
-            dateFrom: formatISODate(formState.startDate),
-            dateTo: formatISODate(formState.endDate),
-          },
-          tokens.access
-        )
+        const response = await runSimulation(payload, tokens.access)
 
         if (!response.success || !response.recommendations) {
           throw new Error("Simulation indisponible pour le moment.")
         }
 
         setSimulationResult(response.recommendations)
+        setLastRequest(payload)
         toast.success("Simulation réalisée avec succès.")
       } catch (error) {
         const message = error instanceof Error ? error.message : "Impossible de lancer la simulation."
@@ -284,6 +288,34 @@ export function SimulationPage() {
     },
     [formState, formatISODate, logout, productCode, tokens?.access]
   )
+
+  const handleExportPdf = useCallback(async () => {
+    if (!simulationResult || !lastRequest) return
+    if (!tokens?.access) {
+      toast.error("Veuillez vous reconnecter pour exporter le rapport.")
+      logout()
+      return
+    }
+    setExportingPdf(true)
+    try {
+      const blob = await downloadSimulationReport(lastRequest, tokens.access)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      const safeName = lastRequest.advertiser.replace(/[^a-z0-9._ -]/gi, "_").trim() || "annonceur"
+      link.download = `simulation_${safeName}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      toast.success("Rapport PDF généré.")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Impossible de générer le rapport PDF."
+      toast.error(message)
+    } finally {
+      setExportingPdf(false)
+    }
+  }, [simulationResult, lastRequest, tokens?.access, logout])
 
   const channelEntries = useMemo(() => {
     if (!simulationResult?.channel_allocation) {
@@ -561,9 +593,26 @@ export function SimulationPage() {
                         Allocation optimale du budget de {formatCurrency(simulationResult.total_budget)} pour {simulationResult.campaign_period.total_days} jours.
                       </CardDescription>
                     </div>
-                    <Badge variant={simulationResult.is_new_advertiser ? "warning" : "success"}>
-                      {simulationResult.is_new_advertiser ? "Nouveau annonceur" : "Annonceur connu"}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Badge variant={simulationResult.is_new_advertiser ? "warning" : "success"}>
+                        {simulationResult.is_new_advertiser ? "Nouveau annonceur" : "Annonceur connu"}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportPdf}
+                        disabled={exportingPdf || !lastRequest}
+                        className="gap-2 border-[#0c6e85]/30 text-[#0c6e85] hover:bg-[#0c6e85]/10"
+                      >
+                        {exportingPdf ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileDown className="h-4 w-4" />
+                        )}
+                        Exporter en PDF
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

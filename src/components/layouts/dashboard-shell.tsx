@@ -39,7 +39,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       items.push({ icon: BarChart3, label: "Simulation", path: paths.simulation })
     }
 
-    items.push({ icon: Settings, label: "Paramètre", path: paths.settings })
+    items.push({ icon: Settings, label: "Paramètres", path: paths.settings })
     return items
   }, [hasMepProduct])
 

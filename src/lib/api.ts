@@ -621,15 +621,49 @@ export interface SimulationResponsePayload {
   recommendations: SimulationRecommendations;
 }
 
-export function runSimulation(
-  { advertiser, investmentAmount, advertisementDuration, dateFrom, dateTo }: SimulationRequest,
-  token: string
-) {
+function _simulationPath({
+  advertiser,
+  investmentAmount,
+  advertisementDuration,
+  dateFrom,
+  dateTo,
+}: SimulationRequest) {
   const roundedInvestment = Math.round(investmentAmount)
   const roundedDuration = Math.round(advertisementDuration)
-  const path = `/recommendation/${encodeURIComponent(advertiser)}/${encodeURIComponent(
+  return `/recommendation/${encodeURIComponent(advertiser)}/${encodeURIComponent(
     roundedInvestment
   )}/${encodeURIComponent(roundedDuration)}/${encodeURIComponent(dateFrom)}/${encodeURIComponent(dateTo)}`;
+}
+
+export async function downloadSimulationReport(
+  simulationRequest: SimulationRequest,
+  token: string
+): Promise<Blob> {
+  const path = `${_simulationPath(simulationRequest)}/pdf`;
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!response.ok) {
+    let errorMessage = response.statusText;
+    try {
+      const data = await response.json();
+      errorMessage = data?.error || data?.message || JSON.stringify(data);
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(errorMessage || "Impossible de générer le rapport de simulation.");
+  }
+  return response.blob();
+}
+
+export function runSimulation(
+  simulationRequest: SimulationRequest,
+  token: string
+) {
+  const path = _simulationPath(simulationRequest);
   return request<SimulationResponsePayload>(path, { token });
 }
 
@@ -692,6 +726,7 @@ export interface PigeSchedule {
   sector: string;
   identifier: string;
   frequency: "monthly" | "quarterly" | "yearly";
+  send_hour: number;
   recipients: string[];
   is_active: boolean;
   last_sent_at: string | null;
@@ -703,6 +738,7 @@ export interface PigeSchedule {
 
 export interface CreatePigeSchedulePayload {
   frequency: "monthly" | "quarterly" | "yearly";
+  send_hour: number;
   recipients: string[];
 }
 
